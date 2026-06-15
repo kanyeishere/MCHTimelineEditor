@@ -124,8 +124,10 @@ p { margin: 0; }
 .major-cd-badge { position: relative; display: grid; place-items: center; inline-size: 18px; block-size: 18px; border-radius: 6px; background: #2d2616; box-shadow: 0 0 0 1px #d7bc62, 0 2px 5px #0005; }
 .major-cd-badge img { inline-size: 16px; block-size: 16px; object-fit: cover; border-radius: 5px; }
 .major-cd-badge small { position: absolute; inset-block-start: -7px; color: #3b2a00; font-size: 8px; font-weight: 800; text-shadow: 0 1px #fff7; white-space: nowrap; }
-.barrel-prep-row { position: relative; border-bottom: 1px solid #c8c8c8; background: #fffdf3; }
-.barrel-prep-row i { position: absolute; inset-block: 7px; left: 0; background: linear-gradient(90deg, #ffd45c, #ff8a3d); opacity: .86; }
+.buff-row { display: flex; flex-wrap: wrap; gap: 2px; align-content: center; justify-content: center; padding: 3px; border-bottom: 1px solid #c8c8c8; background: #fffdf3; overflow: hidden; }
+.buff-badge { display: grid; place-items: center; min-inline-size: 18px; block-size: 24px; padding-inline: 2px; border-radius: 6px; color: #3b2300; background: linear-gradient(#ffe79a, #ffb34f); box-shadow: 0 0 0 1px #df9d23 inset; }
+.buff-badge b { font-size: 12px; line-height: 1; }
+.buff-badge small { font-size: 8px; line-height: 1; white-space: nowrap; }
 .charge-row { position: relative; border-bottom: 1px solid #c8c8c8; background: #f6fbff; }
 .charge-row i { position: absolute; inset-block: 7px; left: 0; opacity: .78; }
 .reassemble-row i { background: #d7bc62; }
