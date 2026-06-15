@@ -909,6 +909,39 @@ function serializePlan() {
   };
 }
 
+
+function canActionRemainAt(action, columnIndex, kind, ogcdIndex, times = getTimelineTimes()) {
+  const releaseTime = getReleaseTimeForPlacement(columnIndex, kind, ogcdIndex ?? null, times);
+  const resources = getResourcesBefore(columnIndex, kind, ogcdIndex || 0, times);
+  if (action.requiresBuff && !isBuffActive(resources, action.requiresBuff, releaseTime)) return false;
+  if (action.requiresOverheat && !isBuffActive(resources, 'overheat', releaseTime)) return false;
+  const heatChange = getEffectiveHeatChange(action, resources, releaseTime);
+  if (heatChange < 0 && resources.heat < Math.abs(heatChange)) return false;
+  if (action.batteryCostMin && resources.battery < action.batteryCostMin) return false;
+  if ((action.battery || 0) < 0 && resources.battery < Math.abs(action.battery)) return false;
+  return true;
+}
+
+function sanitizeCurrentPlan() {
+  let removed = 0;
+  for (let columnIndex = 0; columnIndex < plan.length; columnIndex += 1) {
+    const column = plan[columnIndex];
+    const gcdAction = actionsById[column.gcd];
+    if (gcdAction && !canActionRemainAt(gcdAction, columnIndex, 'gcd', null)) {
+      column.gcd = null;
+      removed += 1;
+    }
+    column.ogcds.forEach((actionId, ogcdIndex) => {
+      const action = actionsById[actionId];
+      if (action && !canActionRemainAt(action, columnIndex, 'ogcd', ogcdIndex)) {
+        column.ogcds[ogcdIndex] = null;
+        removed += 1;
+      }
+    });
+  }
+  return removed;
+}
+
 function normalizeImportedPlan(imported) {
   const rawPlan = Array.isArray(imported) ? imported : imported?.plan;
   if (!Array.isArray(rawPlan)) throw new Error('导入文件中没有可识别的 plan 数组。');
@@ -944,7 +977,8 @@ function importTimeline(file) {
   reader.addEventListener('load', () => {
     try {
       plan = normalizeImportedPlan(JSON.parse(reader.result));
-      showToast(`已导入 ${file.name}。`);
+      const removed = sanitizeCurrentPlan();
+      showToast(removed ? `已导入 ${file.name}，并移除了 ${removed} 个缺少预备/资源的非法技能。` : `已导入 ${file.name}。`);
       renderTimeline();
     } catch (error) {
       showToast(`导入失败：${error.message}`);
