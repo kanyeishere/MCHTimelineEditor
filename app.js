@@ -121,6 +121,33 @@ function isInBuffWindow(releaseTime, buffWindows) {
   return buffWindows.some(window => releaseTime >= window.start && releaseTime <= window.end);
 }
 
+
+function applyResourceChange(resources, actionId) {
+  const action = actionsById[actionId];
+  if (!action) return resources;
+  resources.heat = Math.max(0, Math.min(100, resources.heat + (action.heat || 0)));
+  if (action.drainBattery) resources.battery = 0;
+  else resources.battery = Math.max(0, Math.min(100, resources.battery + (action.battery || 0)));
+  return resources;
+}
+
+function getResourcesBefore(columnIndex, kind, ogcdIndex = 0) {
+  const resources = { heat: 0, battery: 0 };
+
+  for (let index = 0; index < columnIndex; index += 1) {
+    const column = plan[index];
+    [column.gcd, ...column.ogcds].filter(Boolean).forEach(actionId => applyResourceChange(resources, actionId));
+  }
+
+  const column = plan[columnIndex];
+  if (kind === 'ogcd') {
+    if (column.gcd) applyResourceChange(resources, column.gcd);
+    column.ogcds.slice(0, ogcdIndex).filter(Boolean).forEach(actionId => applyResourceChange(resources, actionId));
+  }
+
+  return resources;
+}
+
 function deriveState(times = getTimelineTimes()) {
   let heat = 0;
   let battery = 0;
@@ -129,10 +156,9 @@ function deriveState(times = getTimelineTimes()) {
 
   derivedState = plan.map(column => {
     [column.gcd, ...column.ogcds].filter(Boolean).forEach(actionId => {
-      const action = actionsById[actionId];
-      heat = Math.max(0, Math.min(100, heat + (action.heat || 0)));
-      if (action.drainBattery) battery = 0;
-      else battery = Math.max(0, Math.min(100, battery + (action.battery || 0)));
+      const resources = applyResourceChange({ heat, battery }, actionId);
+      heat = resources.heat;
+      battery = resources.battery;
       if (actionId === 'double-check') doubleCheckCharges -= 1;
       if (actionId === 'checkmate') checkmateCharges -= 1;
     });
@@ -258,9 +284,13 @@ function renderTimeline() {
   deriveState(times);
   const lastState = derivedState.at(-1) || { heat: 0, battery: 0, doubleCheckCharges: 3, checkmateCharges: 3 };
   elements.heatNow.textContent = lastState.heat;
+  elements.heatNow.title = `当前热量：${lastState.heat} / 100`;
   elements.heatMeter.value = lastState.heat;
+  elements.heatMeter.title = `当前热量：${lastState.heat} / 100`;
   elements.batteryNow.textContent = lastState.battery;
+  elements.batteryNow.title = `当前电量：${lastState.battery} / 100`;
   elements.batteryMeter.value = lastState.battery;
+  elements.batteryMeter.title = `当前电量：${lastState.battery} / 100`;
   elements.doubleNow.textContent = lastState.doubleCheckCharges;
   elements.checkNow.textContent = lastState.checkmateCharges;
 
@@ -270,9 +300,9 @@ function renderTimeline() {
     element.className = 'timeline-column';
     element.innerHTML = `
       <div class="time-label">${formatTime(timeOf(columnIndex, times))}</div>
-      <div class="resource-bars">
-        <i class="heat-bar" style="height:${derivedState[columnIndex].heat}%"></i>
-        <i class="battery-bar" style="height:${derivedState[columnIndex].battery}%"></i>
+      <div class="resource-bars" title="热量 ${derivedState[columnIndex].heat} / 100｜电量 ${derivedState[columnIndex].battery} / 100">
+        <i class="heat-bar" title="热量 ${derivedState[columnIndex].heat} / 100" style="height:${derivedState[columnIndex].heat}%"></i>
+        <i class="battery-bar" title="电量 ${derivedState[columnIndex].battery} / 100" style="height:${derivedState[columnIndex].battery}%"></i>
       </div>
     `;
     element.append(createSlot(columnIndex, 'gcd', null, column.gcd, false, timeOf(columnIndex, times), buffWindows));
@@ -341,8 +371,10 @@ function handleDrop(event, columnIndex, kind, ogcdIndex) {
     return;
   }
 
-  if (action.type !== kind) {
-    showToast(kind === 'gcd' ? '这里只能放战技（GCD）。' : '每个GCD之间最多插入3个能力技能（oGCD）。');
+  const dropTime = timeOf(columnIndex, times);
+  const prepullGcdSlotAllowsOgcd = kind === 'gcd' && dropTime < 0 && action.type === 'ogcd';
+  if (action.type !== kind && !prepullGcdSlotAllowsOgcd) {
+    showToast(kind === 'gcd' ? '这里只能放战技（GCD）；但 -15s 到 0s 倒计时区间的GCD格可以放能力技。' : '每个GCD之间最多插入3个能力技能（oGCD）。');
     return;
   }
 
@@ -357,17 +389,17 @@ function handleDrop(event, columnIndex, kind, ogcdIndex) {
     return;
   }
 
-  const previousState = derivedState[columnIndex - 1] || { heat: 0, battery: 0 };
-  if ((action.heat || 0) < 0 && previousState.heat < Math.abs(action.heat)) {
-    showToast(`${action.cn} 需要 ${Math.abs(action.heat)} 热量。`);
+  const availableResources = getResourcesBefore(columnIndex, kind, ogcdIndex || 0);
+  if ((action.heat || 0) < 0 && availableResources.heat < Math.abs(action.heat)) {
+    showToast(`${action.cn} 需要 ${Math.abs(action.heat)} 热量，当前只有 ${availableResources.heat}。`);
     return;
   }
-  if (action.batteryCostMin && previousState.battery < action.batteryCostMin) {
-    showToast(`${action.cn} 至少需要 ${action.batteryCostMin} 电量，发动后会耗尽全部电量。`);
+  if (action.batteryCostMin && availableResources.battery < action.batteryCostMin) {
+    showToast(`${action.cn} 至少需要 ${action.batteryCostMin} 电量，当前只有 ${availableResources.battery}，发动后会耗尽全部电量。`);
     return;
   }
-  if ((action.battery || 0) < 0 && previousState.battery < Math.abs(action.battery)) {
-    showToast(`${action.cn} 需要 ${Math.abs(action.battery)} 电量。`);
+  if ((action.battery || 0) < 0 && availableResources.battery < Math.abs(action.battery)) {
+    showToast(`${action.cn} 需要 ${Math.abs(action.battery)} 电量，当前只有 ${availableResources.battery}。`);
     return;
   }
 
