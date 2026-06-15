@@ -115,6 +115,95 @@ function maxOgcdSlotsFor(column) {
   return action?.gcdDuration === 1.5 ? 2 : 3;
 }
 
+
+function upperBound(sortedNumbers, value) {
+  let low = 0;
+  let high = sortedNumbers.length;
+  while (low < high) {
+    const mid = (low + high) >> 1;
+    if (sortedNumbers[mid] <= value) low = mid + 1;
+    else high = mid;
+  }
+  return low;
+}
+
+function countBetween(sortedNumbers, minExclusive, maxInclusive) {
+  return upperBound(sortedNumbers, maxInclusive) - upperBound(sortedNumbers, minExclusive);
+}
+
+function collectTimelineFacts(times = getTimelineTimes()) {
+  const useTimesByAction = new Map();
+  const addUse = (actionId, releaseTime) => {
+    if (!actionId) return;
+    if (!useTimesByAction.has(actionId)) useTimesByAction.set(actionId, []);
+    useTimesByAction.get(actionId).push(releaseTime);
+  };
+
+  plan.forEach((column, columnIndex) => {
+    const baseTime = timeOf(columnIndex, times);
+    addUse(column.gcd, baseTime);
+    column.ogcds.forEach((actionId, ogcdIndex) => addUse(actionId, baseTime + ((ogcdIndex + 1) * 0.6)));
+  });
+
+  useTimesByAction.forEach(useTimes => useTimes.sort((a, b) => a - b));
+  return {
+    times,
+    useTimesByAction,
+    heatBlastTimes: useTimesByAction.get('heat-blast') || [],
+    blazingShotTimes: useTimesByAction.get('blazing-shot') || []
+  };
+}
+
+function getReductionFromFacts(actionId, useTime, targetTime, facts) {
+  if (actionId === 'gauss-round' || actionId === 'ricochet') {
+    return countBetween(facts.heatBlastTimes, useTime, targetTime) * 15;
+  }
+  if (actionId === 'double-check' || actionId === 'checkmate') {
+    return countBetween(facts.blazingShotTimes, useTime, targetTime) * 15;
+  }
+  return 0;
+}
+
+function getAvailableChargesAtWithFacts(actionId, atTime, facts) {
+  const action = actionsById[actionId];
+  const maxCharges = action?.charges || 1;
+  const recast = action?.recast || DEFAULT_GCD_SECONDS;
+  const useTimes = facts.useTimesByAction.get(actionId) || [];
+  let activeCooldowns = 0;
+
+  for (const useTime of useTimes) {
+    if (useTime > atTime) break;
+    const effectiveRecast = Math.max(0, recast - getReductionFromFacts(actionId, useTime, atTime, facts));
+    if (atTime - useTime < effectiveRecast) activeCooldowns += 1;
+  }
+
+  return Math.max(0, maxCharges - activeCooldowns);
+}
+
+function getRobotEventsFromFacts(facts) {
+  const events = [];
+  const queenTimes = facts.useTimesByAction.get('automaton-queen') || [];
+  queenTimes.forEach(queenTime => {
+    [0, 1, 2, 3].forEach(index => events.push({ actionId: 'pile-bunker', time: queenTime + 4.5 + (index * 1.5) }));
+    events.push({ actionId: 'crowned-collider', time: queenTime + 10.5 });
+  });
+  return events.sort((a, b) => a.time - b.time);
+}
+
+function bucketRobotEventsByColumn(events, times) {
+  const buckets = Array.from({ length: plan.length }, () => [[], []]);
+  let columnIndex = 0;
+
+  events.forEach((event, eventIndex) => {
+    while (columnIndex < times.length - 1 && event.time >= times[columnIndex + 1]) columnIndex += 1;
+    if (event.time >= times[columnIndex] && event.time < (times[columnIndex + 1] ?? Infinity)) {
+      buckets[columnIndex][eventIndex % 2].push(event);
+    }
+  });
+
+  return buckets;
+}
+
 function getBuffWindows(times = getTimelineTimes()) {
   const windows = [];
   plan.forEach((column, columnIndex) => {
@@ -159,7 +248,7 @@ function getResourcesBefore(columnIndex, kind, ogcdIndex = 0) {
   return resources;
 }
 
-function deriveState(times = getTimelineTimes()) {
+function deriveState(times = getTimelineTimes(), facts = collectTimelineFacts(times)) {
   let heat = 0;
   let battery = 0;
   derivedState = plan.map((column, columnIndex) => {
@@ -169,11 +258,12 @@ function deriveState(times = getTimelineTimes()) {
       battery = resources.battery;
     });
 
+    const columnTime = timeOf(columnIndex, times);
     return {
       heat,
       battery,
-      doubleCheckCharges: getAvailableChargesAt('double-check', timeOf(columnIndex, times), times),
-      checkmateCharges: getAvailableChargesAt('checkmate', timeOf(columnIndex, times), times)
+      doubleCheckCharges: getAvailableChargesAtWithFacts('double-check', columnTime, facts),
+      checkmateCharges: getAvailableChargesAtWithFacts('checkmate', columnTime, facts)
     };
   });
 }
@@ -319,8 +409,10 @@ function renderTooltip(action) {
 
 function renderTimeline() {
   const times = getTimelineTimes();
+  const facts = collectTimelineFacts(times);
   const buffWindows = getBuffWindows(times);
-  deriveState(times);
+  const robotBuckets = bucketRobotEventsByColumn(getRobotEventsFromFacts(facts), times);
+  deriveState(times, facts);
   const lastState = derivedState.at(-1) || { heat: 0, battery: 0, doubleCheckCharges: 3, checkmateCharges: 3 };
   if (elements.heatNow) {
     elements.heatNow.textContent = lastState.heat;
@@ -342,6 +434,7 @@ function renderTimeline() {
   if (elements.checkNow) elements.checkNow.textContent = lastState.checkmateCharges;
 
   elements.grid.innerHTML = '';
+  const fragment = document.createDocumentFragment();
   plan.forEach((column, columnIndex) => {
     const element = document.createElement('div');
     element.className = 'timeline-column';
@@ -358,10 +451,11 @@ function renderTimeline() {
     [0, 1, 2].forEach(slotIndex => {
       element.append(createSlot(columnIndex, 'ogcd', slotIndex, column.ogcds[slotIndex], slotIndex >= maxOgcdSlotsFor(column), timeOf(columnIndex, times) + ((slotIndex + 1) * 0.6), buffWindows));
     });
-    element.append(createRobotSlot(columnIndex, times, buffWindows, 0));
-    element.append(createRobotSlot(columnIndex, times, buffWindows, 1));
-    elements.grid.append(element);
+    element.append(createRobotSlot(robotBuckets[columnIndex][0], buffWindows));
+    element.append(createRobotSlot(robotBuckets[columnIndex][1], buffWindows));
+    fragment.append(element);
   });
+  elements.grid.append(fragment);
 }
 
 function createSlot(columnIndex, kind, ogcdIndex, actionId, disabled = false, releaseTime = timeOf(columnIndex), buffWindows = []) {
@@ -391,24 +485,9 @@ function createSlot(columnIndex, kind, ogcdIndex, actionId, disabled = false, re
   return slot;
 }
 
-function getRobotEvents(times = getTimelineTimes()) {
-  const events = [];
-  plan.forEach((column, columnIndex) => {
-    if (column.ogcds.includes('automaton-queen')) {
-      const queenTime = timeOf(columnIndex, times) + ((column.ogcds.indexOf('automaton-queen') + 1) * 0.6);
-      [0, 1, 2, 3].forEach(index => events.push({ actionId: 'pile-bunker', time: queenTime + 4.5 + (index * 1.5) }));
-      events.push({ actionId: 'crowned-collider', time: queenTime + 10.5 });
-    }
-  });
-  return events;
-}
-
-function createRobotSlot(columnIndex, times, buffWindows, rowIndex) {
+function createRobotSlot(events, buffWindows) {
   const slot = document.createElement('div');
-  slot.className = `timeline-slot robot-slot robot-slot-${rowIndex + 1}`;
-  const start = timeOf(columnIndex, times);
-  const end = timeOf(columnIndex + 1, times);
-  const events = getRobotEvents(times).filter((event, eventIndex) => event.time >= start && event.time < end && eventIndex % 2 === rowIndex);
+  slot.className = 'timeline-slot robot-slot';
   slot.innerHTML = events.map(event => {
     const action = actionsById[event.actionId];
     return `<span class="placed-action robot-action ${isInBuffWindow(event.time, buffWindows) ? 'buffed-action' : ''}"><small>${formatTime(event.time)}</small><img class="placed-icon" src="${action.icon}" alt="${action.cn}" title="${action.cn} ${formatTime(event.time)}"></span>`;
