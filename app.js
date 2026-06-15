@@ -306,44 +306,41 @@ function getChargeRecoveryTime(actionId, cooldownStartTime, facts) {
 function simulateChargeState(actionId, atTime, useTimes, facts) {
   const action = actionsById[actionId];
   const maxCharges = action?.charges || 1;
+  const recoveryQueue = [];
   const recoveryEvents = [];
-  let charges = maxCharges;
-  let nextRecoveryTime = null;
   let blockedUseTime = null;
 
-  const startRecoveryFrom = startTime => {
-    if (nextRecoveryTime === null) nextRecoveryTime = getChargeRecoveryTime(actionId, startTime, facts);
-  };
-
   const recoverUntil = (limitTime, includeEqual = true) => {
-    while (nextRecoveryTime !== null && (includeEqual ? nextRecoveryTime <= limitTime : nextRecoveryTime < limitTime)) {
-      const recoveredAt = nextRecoveryTime;
-      recoveryEvents.push(recoveredAt);
-      charges = Math.min(maxCharges, charges + 1);
-      nextRecoveryTime = charges >= maxCharges ? null : getChargeRecoveryTime(actionId, recoveredAt, facts);
+    while (recoveryQueue.length && (includeEqual ? recoveryQueue[0] <= limitTime : recoveryQueue[0] < limitTime)) {
+      recoveryEvents.push(recoveryQueue.shift());
     }
   };
 
   useTimes.filter(useTime => useTime <= atTime).sort((a, b) => a - b).forEach(useTime => {
-    // 同一时刻使用会先消耗已有层数，再结算该时刻恢复，避免导入旧轴时改变可用性。
-    // 但只要层数没有回满，充能计时就会持续向下一层推进；例如钻头 200s 回到 1 层后，
-    // 即使 212s 再次使用，下一层仍应在 220s 恢复，而不是从 212s 重新开始计时。
+    // 同一时刻使用会先消耗已有层数，再处理该时刻恢复；如果正好踩在恢复点，
+    // 该恢复会被本次使用吃掉并顺延到下一轮，避免旧轴导入时把同一时间点错误算成额外层数。
     recoverUntil(useTime, false);
-    if (charges <= 0) {
+    if (recoveryQueue[0] === useTime) {
+      const consumedRecoveryTime = recoveryQueue.shift();
+      const delayedRecoveryTime = getChargeRecoveryTime(actionId, consumedRecoveryTime, facts);
+      recoveryQueue.unshift(delayedRecoveryTime);
+    }
+
+    const availableCharges = maxCharges - recoveryQueue.length;
+    if (availableCharges <= 0) {
       blockedUseTime ??= useTime;
       return;
     }
 
-    charges -= 1;
-    startRecoveryFrom(useTime);
-    recoverUntil(useTime, true);
+    const cooldownStartTime = recoveryQueue.length ? recoveryQueue[recoveryQueue.length - 1] : useTime;
+    recoveryQueue.push(getChargeRecoveryTime(actionId, cooldownStartTime, facts));
   });
 
   recoverUntil(atTime);
 
   return {
-    charges,
-    nextRecoveryTime,
+    charges: maxCharges - recoveryQueue.length,
+    nextRecoveryTime: recoveryQueue[0] ?? null,
     recoveryEvents,
     blockedUseTime
   };
