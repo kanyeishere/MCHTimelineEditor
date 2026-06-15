@@ -85,9 +85,30 @@ const elements = {
   addOverheatCombo: document.getElementById('addOverheatCombo')
 };
 
+let timelineColumnWidth = 66;
+
+function setTimelineZoom(nextWidth, anchorRatio = 0) {
+  const timeline = document.querySelector('.timeline');
+  const previousScrollableWidth = Math.max(1, timeline.scrollWidth - timeline.clientWidth);
+  const previousScrollRatio = (timeline.scrollLeft + (timeline.clientWidth * anchorRatio)) / previousScrollableWidth;
+  timelineColumnWidth = Math.max(36, Math.min(140, nextWidth));
+  document.documentElement.style.setProperty('--timeline-column-width', `${timelineColumnWidth}px`);
+  requestAnimationFrame(() => {
+    const nextScrollableWidth = Math.max(1, timeline.scrollWidth - timeline.clientWidth);
+    timeline.scrollLeft = (previousScrollRatio * nextScrollableWidth) - (timeline.clientWidth * anchorRatio);
+  });
+}
+
 function enableHorizontalWheelScroll() {
   const timeline = document.querySelector('.timeline');
   timeline.addEventListener('wheel', event => {
+    if (event.ctrlKey) {
+      event.preventDefault();
+      const zoomDirection = event.deltaY > 0 ? -1 : 1;
+      const anchorRatio = Math.max(0, Math.min(1, (event.clientX - timeline.getBoundingClientRect().left) / timeline.clientWidth));
+      setTimelineZoom(timelineColumnWidth + (zoomDirection * 6), anchorRatio);
+      return;
+    }
     if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
     event.preventDefault();
     timeline.scrollLeft += event.deltaY;
@@ -535,16 +556,30 @@ function getAvailability(action, slotIndex, times = getTimelineTimes(), options 
   const recast = action.recast || DEFAULT_GCD_SECONDS;
   if (action.charges) {
     const facts = collectTimelineFacts(times);
-    const simulatedUseTimes = [...useEvents.map(use => use.time), now].sort((a, b) => a - b);
-    const simulation = simulateChargeState(action.id, MAX_TIME_SECONDS, simulatedUseTimes, facts);
+    const existingUseTimes = useEvents.map(use => use.time);
+    const beforeCandidate = simulateChargeState(action.id, now, existingUseTimes, facts);
+    if (beforeCandidate.charges <= 0) {
+      const remaining = beforeCandidate.nextRecoveryTime === null ? action.recast : Math.max(0, beforeCandidate.nextRecoveryTime - now);
+      return { ok: false, message: `充能中，约 ${Math.ceil(remaining)} 秒后可用` };
+    }
 
-    if (simulation.blockedUseTime !== null) {
-      if (Math.abs(simulation.blockedUseTime - now) < 0.001) {
-        const beforeCandidate = simulateChargeState(action.id, now, useEvents.map(use => use.time), facts);
-        const remaining = beforeCandidate.nextRecoveryTime === null ? action.recast : Math.max(0, beforeCandidate.nextRecoveryTime - now);
-        return { ok: false, message: `充能中，约 ${Math.ceil(remaining)} 秒后可用` };
+    let charges = beforeCandidate.charges - 1;
+    let nextRecoveryTime = beforeCandidate.nextRecoveryTime;
+    if (nextRecoveryTime === null) nextRecoveryTime = getChargeRecoveryTime(action.id, now, facts);
+    const recoverUntil = limitTime => {
+      while (nextRecoveryTime !== null && nextRecoveryTime <= limitTime) {
+        charges = Math.min(action.charges, charges + 1);
+        if (charges >= action.charges) nextRecoveryTime = null;
+        else nextRecoveryTime = getChargeRecoveryTime(action.id, nextRecoveryTime, facts);
       }
-      return { ok: false, message: `会导致后续 ${formatTime(simulation.blockedUseTime)} 的${action.cn}充能不足` };
+    };
+
+    const futureUseTimes = existingUseTimes.filter(useTime => useTime > now).sort((a, b) => a - b);
+    for (const futureUseTime of futureUseTimes) {
+      recoverUntil(futureUseTime);
+      if (charges <= 0) return { ok: false, message: `会导致后续 ${formatTime(futureUseTime)} 的${action.cn}充能不足` };
+      charges -= 1;
+      if (nextRecoveryTime === null) nextRecoveryTime = getChargeRecoveryTime(action.id, futureUseTime, facts);
     }
 
     return { ok: true };
@@ -685,6 +720,12 @@ function renderTimeline() {
         <i class="battery-bar" title="电量 ${derivedState[columnIndex].battery} / 100" style="height:${derivedState[columnIndex].battery}%"></i>
       </div>
     `;
+    element.querySelectorAll('.major-cd-badge').forEach(badge => {
+      badge.addEventListener('click', event => {
+        event.stopPropagation();
+        addMajorCooldownAction(badge.dataset.actionId, columnIndex);
+      });
+    });
     element.append(createSlot(columnIndex, 'gcd', null, column.gcd, false, timeOf(columnIndex, times), buffWindows));
     [0, 1, 2].forEach(slotIndex => {
       element.append(createSlot(columnIndex, 'ogcd', slotIndex, column.ogcds[slotIndex], slotIndex >= maxOgcdSlotsFor(column), timeOf(columnIndex, times) + ((slotIndex + 1) * 0.6), buffWindows));
@@ -711,7 +752,7 @@ function renderMajorCooldownCell(events) {
     const title = event.kind === 'initial'
       ? `${action.cn} 开场可用`
       : `${action.cn} 在 ${formatTime(event.time)} 转好`;
-    return `<span class="major-cd-badge ${event.kind}" title="${title}"><img src="${action.icon}" alt="${action.cn}"><small>${formatTime(event.time)}</small></span>`;
+    return `<span class="major-cd-badge ${event.kind}" data-action-id="${event.actionId}" title="${title}"><img src="${action.icon}" alt="${action.cn}"><small>${formatTime(event.time)}</small></span>`;
   }).join('');
   return `<div class="major-cd-row" title="大技能CD提醒：钻头 / 空气锚 / 回转飞锯 / 枪管加热 / 野火">${content}</div>`;
 }
@@ -815,6 +856,19 @@ function placeAction(action, columnIndex, kind, ogcdIndex = null, source = null,
   if (!options.skipRender) renderTimeline();
   if (!options.silent) showToast(`${action.cn} 已放入 ${formatTime(releaseTime)}。`);
   return true;
+}
+
+function addMajorCooldownAction(actionId, columnIndex) {
+  const action = actionsById[actionId];
+  if (!action) return;
+  if (action.type === 'gcd') {
+    if (plan[columnIndex].gcd) return showToast(`${formatTime(timeOf(columnIndex))} 的GCD格已经有技能。`);
+    placeAction(action, columnIndex, 'gcd');
+    return;
+  }
+  const ogcdIndex = findFirstEmptyOgcdSlot(columnIndex);
+  if (ogcdIndex < 0) return showToast(`${formatTime(timeOf(columnIndex))} 下面没有空的能力技槽。`);
+  placeAction(action, columnIndex, 'ogcd', ogcdIndex);
 }
 
 function addActionByClick(actionId) {
