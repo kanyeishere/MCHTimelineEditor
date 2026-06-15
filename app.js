@@ -310,23 +310,30 @@ function simulateChargeState(actionId, atTime, useTimes, facts) {
   const recoveryEvents = [];
   let blockedUseTime = null;
 
-  const recoverUntil = limitTime => {
-    while (nextRecoveryTime !== null && nextRecoveryTime <= limitTime) {
+  const recoverUntil = (limitTime, includeEqual = true) => {
+    while (nextRecoveryTime !== null && (includeEqual ? nextRecoveryTime <= limitTime : nextRecoveryTime < limitTime)) {
       charges = Math.min(maxCharges, charges + 1);
       recoveryEvents.push(nextRecoveryTime);
-      if (charges >= maxCharges) nextRecoveryTime = null;
-      else nextRecoveryTime = getChargeRecoveryTime(actionId, nextRecoveryTime, facts);
+      nextRecoveryTime = charges >= maxCharges
+        ? null
+        : getChargeRecoveryTime(actionId, nextRecoveryTime, facts);
     }
   };
 
   useTimes.filter(useTime => useTime <= atTime).sort((a, b) => a - b).forEach(useTime => {
-    recoverUntil(useTime);
+    recoverUntil(useTime, false);
     if (charges <= 0) {
       blockedUseTime ??= useTime;
       return;
     }
+
+    const wasCapped = charges >= maxCharges;
     charges -= 1;
-    if (nextRecoveryTime === null) nextRecoveryTime = getChargeRecoveryTime(actionId, useTime, facts);
+    if (wasCapped) {
+      nextRecoveryTime = getChargeRecoveryTime(actionId, useTime, facts);
+    } else if (nextRecoveryTime !== null && nextRecoveryTime <= useTime) {
+      nextRecoveryTime = getChargeRecoveryTime(actionId, nextRecoveryTime, facts);
+    }
   });
 
   recoverUntil(atTime);
