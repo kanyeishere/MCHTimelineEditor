@@ -165,20 +165,65 @@ function getReductionFromFacts(actionId, useTime, targetTime, facts) {
   return 0;
 }
 
-function getAvailableChargesAtWithFacts(actionId, atTime, facts) {
+function getChargeRecoveryTime(actionId, cooldownStartTime, facts) {
+  const action = actionsById[actionId];
+  const recast = action?.recast || DEFAULT_GCD_SECONDS;
+  if (!facts) return cooldownStartTime + recast;
+
+  let recoveryTime = cooldownStartTime + recast;
+  for (let index = 0; index < 6; index += 1) {
+    const reducedRecast = Math.max(0, recast - getReductionFromFacts(actionId, cooldownStartTime, recoveryTime, facts));
+    const nextRecoveryTime = cooldownStartTime + reducedRecast;
+    if (Math.abs(nextRecoveryTime - recoveryTime) < 0.001) return nextRecoveryTime;
+    recoveryTime = nextRecoveryTime;
+  }
+  return recoveryTime;
+}
+
+function simulateChargeState(actionId, atTime, useTimes, facts) {
   const action = actionsById[actionId];
   const maxCharges = action?.charges || 1;
-  const recast = action?.recast || DEFAULT_GCD_SECONDS;
+  let charges = maxCharges;
+  let nextRecoveryTime = null;
+  const recoveryEvents = [];
+  let blockedUseTime = null;
+
+  const recoverUntil = limitTime => {
+    while (nextRecoveryTime !== null && nextRecoveryTime <= limitTime) {
+      charges = Math.min(maxCharges, charges + 1);
+      recoveryEvents.push(nextRecoveryTime);
+      if (charges >= maxCharges) nextRecoveryTime = null;
+      else nextRecoveryTime = getChargeRecoveryTime(actionId, nextRecoveryTime, facts);
+    }
+  };
+
+  useTimes.filter(useTime => useTime <= atTime).sort((a, b) => a - b).forEach(useTime => {
+    recoverUntil(useTime);
+    if (charges <= 0) {
+      blockedUseTime ??= useTime;
+      return;
+    }
+    charges -= 1;
+    if (nextRecoveryTime === null) nextRecoveryTime = getChargeRecoveryTime(actionId, useTime, facts);
+  });
+
+  recoverUntil(atTime);
+
+  return { charges, nextRecoveryTime, recoveryEvents, blockedUseTime };
+}
+
+function getAvailableChargesAtWithFacts(actionId, atTime, facts) {
+  const action = actionsById[actionId];
+  if (!action?.charges) return 1;
   const useTimes = facts.useTimesByAction.get(actionId) || [];
-  let activeCooldowns = 0;
+  return simulateChargeState(actionId, atTime, useTimes, facts).charges;
+}
 
-  for (const useTime of useTimes) {
-    if (useTime > atTime) break;
-    const effectiveRecast = Math.max(0, recast - getReductionFromFacts(actionId, useTime, atTime, facts));
-    if (atTime - useTime < effectiveRecast) activeCooldowns += 1;
-  }
-
-  return Math.max(0, maxCharges - activeCooldowns);
+function getChargeRecoveryEventsFromFacts(actionId, facts) {
+  const action = actionsById[actionId];
+  if (!action?.charges) return [];
+  const useTimes = facts.useTimesByAction.get(actionId) || [];
+  return simulateChargeState(actionId, MAX_TIME_SECONDS, useTimes, facts).recoveryEvents;
 }
 
 function getRobotEventsFromFacts(facts) {
@@ -199,9 +244,10 @@ function getMajorCooldownEventsFromFacts(facts) {
     const action = actionsById[actionId];
     if (!action) return;
     events.push({ actionId, time: START_TIME_SECONDS, kind: 'initial' });
-    (facts.useTimesByAction.get(actionId) || []).forEach(useTime => {
-      events.push({ actionId, time: useTime + (action.recast || DEFAULT_GCD_SECONDS), kind: 'ready' });
-    });
+    const readyTimes = action.charges
+      ? getChargeRecoveryEventsFromFacts(actionId, facts)
+      : (facts.useTimesByAction.get(actionId) || []).map(useTime => useTime + (action.recast || DEFAULT_GCD_SECONDS));
+    readyTimes.forEach(time => events.push({ actionId, time, kind: 'ready' }));
   });
 
   return events
@@ -333,16 +379,8 @@ function getActionUseTimes(actionId, times = getTimelineTimes()) {
 }
 
 function getAvailableChargesAt(actionId, atTime, times = getTimelineTimes()) {
-  const action = actionsById[actionId];
-  const maxCharges = action?.charges || 1;
-  const recast = action?.recast || DEFAULT_GCD_SECONDS;
-  const activeCooldowns = getActionUseTimes(actionId, times)
-    .filter(useTime => useTime <= atTime)
-    .filter(useTime => {
-      const effectiveRecast = Math.max(0, recast - getRecastReduction(actionId, useTime, atTime));
-      return atTime - useTime < effectiveRecast;
-    });
-  return Math.max(0, maxCharges - activeCooldowns.length);
+  const facts = collectTimelineFacts(times);
+  return getAvailableChargesAtWithFacts(actionId, atTime, facts);
 }
 
 function getReleaseTimeForPlacement(columnIndex, kind, ogcdIndex, times = getTimelineTimes()) {
@@ -392,22 +430,17 @@ function getAvailability(action, slotIndex, times = getTimelineTimes(), options 
 
   const recast = action.recast || DEFAULT_GCD_SECONDS;
   if (action.charges) {
-    const candidate = { time: now, candidate: true };
-    const simulatedUses = [...useEvents, candidate].sort((a, b) => a.time - b.time || (a.candidate ? 1 : -1));
+    const facts = collectTimelineFacts(times);
+    const simulatedUseTimes = [...useEvents.map(use => use.time), now].sort((a, b) => a - b);
+    const simulation = simulateChargeState(action.id, MAX_TIME_SECONDS, simulatedUseTimes, facts);
 
-    for (const currentUse of simulatedUses) {
-      const activeBeforeCurrentUse = simulatedUses
-        .filter(use => use !== currentUse && use.time < currentUse.time)
-        .filter(use => cooldownActiveAt(action.id, use.time, currentUse.time, recast));
-
-      if (activeBeforeCurrentUse.length >= action.charges) {
-        if (currentUse.candidate) {
-          const firstBlockedUse = activeBeforeCurrentUse[0];
-          const remaining = Math.max(0, recast - getRecastReduction(action.id, firstBlockedUse.time, now) - (now - firstBlockedUse.time));
-          return { ok: false, message: `充能中，约 ${Math.ceil(remaining)} 秒后可用` };
-        }
-        return { ok: false, message: `会导致后续 ${formatTime(currentUse.time)} 的${action.cn}充能不足` };
+    if (simulation.blockedUseTime !== null) {
+      if (Math.abs(simulation.blockedUseTime - now) < 0.001) {
+        const beforeCandidate = simulateChargeState(action.id, now, useEvents.map(use => use.time), facts);
+        const remaining = beforeCandidate.nextRecoveryTime === null ? action.recast : Math.max(0, beforeCandidate.nextRecoveryTime - now);
+        return { ok: false, message: `充能中，约 ${Math.ceil(remaining)} 秒后可用` };
       }
+      return { ok: false, message: `会导致后续 ${formatTime(simulation.blockedUseTime)} 的${action.cn}充能不足` };
     }
 
     return { ok: true };
