@@ -317,9 +317,15 @@ function simulateChargeState(actionId, atTime, useTimes, facts) {
   };
 
   useTimes.filter(useTime => useTime <= atTime).sort((a, b) => a - b).forEach(useTime => {
-    // 已经放在时间轴上的同一时刻使用与充能恢复，要先结算使用再结算恢复。
-    // 这样旧版导入轴里“钻头在恢复点同一列再次使用”时，不会把正在排队的下一次恢复吞掉。
+    // 同一时刻使用会先消耗已有层数，再处理该时刻恢复；如果正好踩在恢复点，
+    // 该恢复会被本次使用吃掉并顺延到下一轮，避免旧轴导入时把同一时间点错误算成额外层数。
     recoverUntil(useTime, false);
+    if (recoveryQueue[0] === useTime) {
+      const consumedRecoveryTime = recoveryQueue.shift();
+      const delayedRecoveryTime = getChargeRecoveryTime(actionId, consumedRecoveryTime, facts);
+      recoveryQueue.unshift(delayedRecoveryTime);
+    }
+
     const availableCharges = maxCharges - recoveryQueue.length;
     if (availableCharges <= 0) {
       blockedUseTime ??= useTime;
