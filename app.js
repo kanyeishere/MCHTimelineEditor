@@ -37,8 +37,8 @@ const actions = [
   { id: 'roller-dash', cn: '滚轮冲', en: 'Roller Dash', level: 80, type: 'ogcd', category: '职业技能', recast: 3, range: '0米', radius: '0米', desc: '后式自走人偶突进到目标附近。' },
   { id: 'crowned-collider', cn: '王室对撞机', en: 'Crowned Collider', level: 86, type: 'robot', category: '机器人', recast: 1, range: '3米', radius: '0米', potency: 780, desc: '后式自走人偶自动执行的终结攻击。' },
   { id: 'chain-saw', cn: '回转飞锯', en: 'Chain Saw', level: 90, type: 'gcd', category: '职业技能', recast: 60, range: '25米', radius: '25米直线', potency: 660, battery: 20, desc: '直线范围战技；追加效果：电量 +20。' },
-  { id: 'double-check', cn: '双将', en: 'Double Check', level: 92, type: 'ogcd', category: '职业技能', recast: 1, charges: 3, range: '25米', radius: '0米', potency: 160, desc: '虹吸弹的强化版。最大档数：3。' },
-  { id: 'checkmate', cn: '将死', en: 'Checkmate', level: 92, type: 'ogcd', category: '职业技能', recast: 1, charges: 3, range: '25米', radius: '5米', potency: 160, desc: '弹射的强化版。最大档数：3。' },
+  { id: 'double-check', cn: '双将', en: 'Double Check', level: 92, type: 'ogcd', category: '职业技能', recast: 30, charges: 3, range: '25米', radius: '0米', potency: 160, desc: '虹吸弹的强化版。最大档数：3。' },
+  { id: 'checkmate', cn: '将死', en: 'Checkmate', level: 92, type: 'ogcd', category: '职业技能', recast: 30, charges: 3, range: '25米', radius: '5米', potency: 160, desc: '弹射的强化版。最大档数：3。' },
   { id: 'excavator', cn: '掘地飞轮', en: 'Excavator', level: 96, type: 'gcd', category: '职业技能', recast: 2.5, range: '25米', radius: '25米直线', potency: 620, battery: 20, desc: '回转飞锯后获得预备效果时可用，追加电量。' },
   { id: 'full-metal-field', cn: '全金属爆发', en: 'Full Metal Field', level: 100, type: 'gcd', category: '职业技能', recast: 2.5, range: '25米', radius: '5米', potency: 900, desc: '强力范围战技；通常由枪管加热相关效果触发。' },
   { id: 'second-wind', hidden: true, cn: '内丹', en: 'Second Wind', level: 8, type: 'ogcd', category: '职能技能', recast: 120, range: '0米', radius: '0米', desc: '恢复自身HP。' },
@@ -162,23 +162,18 @@ function getResourcesBefore(columnIndex, kind, ogcdIndex = 0) {
 function deriveState(times = getTimelineTimes()) {
   let heat = 0;
   let battery = 0;
-  let doubleCheckCharges = 3;
-  let checkmateCharges = 3;
-
-  derivedState = plan.map(column => {
+  derivedState = plan.map((column, columnIndex) => {
     [column.gcd, ...column.ogcds].filter(Boolean).forEach(actionId => {
       const resources = applyResourceChange({ heat, battery }, actionId);
       heat = resources.heat;
       battery = resources.battery;
-      if (actionId === 'double-check') doubleCheckCharges -= 1;
-      if (actionId === 'checkmate') checkmateCharges -= 1;
     });
 
     return {
       heat,
       battery,
-      doubleCheckCharges: Math.max(0, doubleCheckCharges),
-      checkmateCharges: Math.max(0, checkmateCharges)
+      doubleCheckCharges: getAvailableChargesAt('double-check', timeOf(columnIndex, times), times),
+      checkmateCharges: getAvailableChargesAt('checkmate', timeOf(columnIndex, times), times)
     };
   });
 }
@@ -198,6 +193,32 @@ function getRecastReduction(actionId, useTime, targetTime) {
   });
 
   return reduction;
+}
+
+
+function getActionUseTimes(actionId, times = getTimelineTimes()) {
+  const uses = [];
+  plan.forEach((column, columnIndex) => {
+    const baseTime = timeOf(columnIndex, times);
+    if (column.gcd === actionId) uses.push(baseTime);
+    column.ogcds.forEach((placedId, ogcdIndex) => {
+      if (placedId === actionId) uses.push(baseTime + ((ogcdIndex + 1) * 0.6));
+    });
+  });
+  return uses.sort((a, b) => a - b);
+}
+
+function getAvailableChargesAt(actionId, atTime, times = getTimelineTimes()) {
+  const action = actionsById[actionId];
+  const maxCharges = action?.charges || 1;
+  const recast = action?.recast || DEFAULT_GCD_SECONDS;
+  const activeCooldowns = getActionUseTimes(actionId, times)
+    .filter(useTime => useTime <= atTime)
+    .filter(useTime => {
+      const effectiveRecast = Math.max(0, recast - getRecastReduction(actionId, useTime, atTime));
+      return atTime - useTime < effectiveRecast;
+    });
+  return Math.max(0, maxCharges - activeCooldowns.length);
 }
 
 function getAvailability(action, slotIndex, times = getTimelineTimes()) {
@@ -301,16 +322,24 @@ function renderTimeline() {
   const buffWindows = getBuffWindows(times);
   deriveState(times);
   const lastState = derivedState.at(-1) || { heat: 0, battery: 0, doubleCheckCharges: 3, checkmateCharges: 3 };
-  elements.heatNow.textContent = lastState.heat;
-  elements.heatNow.title = `当前热量：${lastState.heat} / 100`;
-  elements.heatMeter.value = lastState.heat;
-  elements.heatMeter.title = `当前热量：${lastState.heat} / 100`;
-  elements.batteryNow.textContent = lastState.battery;
-  elements.batteryNow.title = `当前电量：${lastState.battery} / 100`;
-  elements.batteryMeter.value = lastState.battery;
-  elements.batteryMeter.title = `当前电量：${lastState.battery} / 100`;
-  elements.doubleNow.textContent = lastState.doubleCheckCharges;
-  elements.checkNow.textContent = lastState.checkmateCharges;
+  if (elements.heatNow) {
+    elements.heatNow.textContent = lastState.heat;
+    elements.heatNow.title = `当前热量：${lastState.heat} / 100`;
+  }
+  if (elements.heatMeter) {
+    elements.heatMeter.value = lastState.heat;
+    elements.heatMeter.title = `当前热量：${lastState.heat} / 100`;
+  }
+  if (elements.batteryNow) {
+    elements.batteryNow.textContent = lastState.battery;
+    elements.batteryNow.title = `当前电量：${lastState.battery} / 100`;
+  }
+  if (elements.batteryMeter) {
+    elements.batteryMeter.value = lastState.battery;
+    elements.batteryMeter.title = `当前电量：${lastState.battery} / 100`;
+  }
+  if (elements.doubleNow) elements.doubleNow.textContent = lastState.doubleCheckCharges;
+  if (elements.checkNow) elements.checkNow.textContent = lastState.checkmateCharges;
 
   elements.grid.innerHTML = '';
   plan.forEach((column, columnIndex) => {

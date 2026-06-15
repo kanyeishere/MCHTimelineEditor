@@ -7,6 +7,10 @@
 body { margin: 0; }
 
 .hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: center;
   padding: 26px 36px 18px;
   background: radial-gradient(circle at top left, #51411c, #202020 48%);
   border-bottom: 1px solid #403a2b;
@@ -40,8 +44,8 @@ p { margin: 0; }
 }
 
 .resources meter { width: 118px; }
-.resources button, .import-button { color: #171717; background: #d7bc62; border: 0; border-radius: 8px; padding: 10px 15px; cursor: pointer; font-weight: 700; font-size: 14px; }
-.resources button:first-of-type { margin-left: auto; }
+.hero-actions { display: flex; gap: 14px; align-items: center; }
+.hero-actions button, .import-button { color: #171717; background: #d7bc62; border: 0; border-radius: 8px; padding: 10px 15px; cursor: pointer; font-weight: 700; font-size: 14px; white-space: nowrap; }
 #importPlan { position: absolute; inline-size: 1px; block-size: 1px; opacity: 0; pointer-events: none; }
 
 .skill-panel { padding: 22px 36px 14px; background: #262626; border-bottom: 1px solid #3f3f3f; }

@@ -8,21 +8,18 @@
   </head>
   <body>
     <header class="hero">
-      <p class="eyebrow">Machinist Timeline Editor</p>
-      <h1>FF14 机工士 PVE 技能时间轴模拟器</h1>
-      <p>技能面板包含机工士职业技能与远敏职能技能；拖动真实技能图标到下方时间轴，悬浮图标可查看详细技能信息。</p>
+      <div class="hero-copy">
+        <p class="eyebrow">Machinist Timeline Editor</p>
+        <h1>FF14 机工士 PVE 技能时间轴模拟器</h1>
+        <p>技能面板包含机工士职业技能与远敏职能技能；拖动真实技能图标到下方时间轴，悬浮图标可查看详细技能信息。</p>
+      </div>
+      <div class="hero-actions">
+        <button id="exportPlan" type="button">⇩ 导出</button>
+        <label class="import-button" for="importPlan">⇧ 导入</label>
+        <input id="importPlan" type="file" accept="application/json,.json">
+        <button id="reset" type="button">↻ 重置</button>
+      </div>
     </header>
-
-    <section class="resources" aria-label="机工士资源">
-      <div>🔥 热量 <b id="heatNow">0</b><meter id="heatMeter" min="0" max="100" value="0"></meter></div>
-      <div>🔋 电量 <b id="batteryNow">0</b><meter id="batteryMeter" min="0" max="100" value="0"></meter></div>
-      <div>双将层数 <b id="doubleNow">3</b></div>
-      <div>将死层数 <b id="checkNow">3</b></div>
-      <button id="exportPlan" type="button">⇩ 导出</button>
-      <label class="import-button" for="importPlan">⇧ 导入</label>
-      <input id="importPlan" type="file" accept="application/json,.json">
-      <button id="reset" type="button">↻ 重置</button>
-    </section>
 
     <section class="skill-panel" aria-label="可拖拽技能图标">
       <div class="panel-heading">
@@ -44,8 +41,8 @@
         <span>能力技 1</span>
         <span>能力技 2</span>
         <span>能力技 3</span>
-        <span>机器人 1</span>
-        <span>机器人 2</span>
+        <span>机器人</span>
+        <span>机器人</span>
       </aside>
       <div id="grid" class="timeline-grid"></div>
     </main>
