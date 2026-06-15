@@ -311,35 +311,93 @@ function getAvailableChargesAt(actionId, atTime, times = getTimelineTimes()) {
   return Math.max(0, maxCharges - activeCooldowns.length);
 }
 
-function getAvailability(action, slotIndex, times = getTimelineTimes()) {
-  const now = timeOf(slotIndex, times);
-  const previousUses = [];
+function getReleaseTimeForPlacement(columnIndex, kind, ogcdIndex, times = getTimelineTimes()) {
+  const baseTime = timeOf(columnIndex, times);
+  return kind === 'ogcd' ? baseTime + ((ogcdIndex + 1) * 0.6) : baseTime;
+}
 
+function isSameLocation(location, columnIndex, kind, ogcdIndex) {
+  return Boolean(location)
+    && location.columnIndex === columnIndex
+    && location.kind === kind
+    && location.ogcdIndex === ogcdIndex;
+}
+
+function shouldIgnorePlacement(ignoreLocations, columnIndex, kind, ogcdIndex) {
+  return ignoreLocations.some(location => isSameLocation(location, columnIndex, kind, ogcdIndex));
+}
+
+function getActionUseEvents(actionId, times = getTimelineTimes(), ignoreLocations = []) {
+  const uses = [];
   plan.forEach((column, columnIndex) => {
-    [column.gcd, ...column.ogcds].forEach(actionId => {
-      if (actionId === action.id) previousUses.push(timeOf(columnIndex, times));
+    if (column.gcd === actionId && !shouldIgnorePlacement(ignoreLocations, columnIndex, 'gcd', null)) {
+      uses.push({ time: timeOf(columnIndex, times), columnIndex, kind: 'gcd', ogcdIndex: null });
+    }
+    column.ogcds.forEach((placedId, ogcdIndex) => {
+      if (placedId === actionId && !shouldIgnorePlacement(ignoreLocations, columnIndex, 'ogcd', ogcdIndex)) {
+        uses.push({ time: timeOf(columnIndex, times) + ((ogcdIndex + 1) * 0.6), columnIndex, kind: 'ogcd', ogcdIndex });
+      }
     });
   });
+  return uses.sort((a, b) => a.time - b.time);
+}
 
-  if (previousUses.length === 0) return { ok: true };
+function cooldownActiveAt(actionId, useTime, atTime, recast) {
+  const effectiveRecast = Math.max(0, recast - getRecastReduction(actionId, useTime, atTime));
+  return atTime - useTime < effectiveRecast;
+}
+
+function getAvailability(action, slotIndex, times = getTimelineTimes(), options = {}) {
+  const kind = options.kind || action.type;
+  const ogcdIndex = options.ogcdIndex ?? null;
+  const now = getReleaseTimeForPlacement(slotIndex, kind, ogcdIndex, times);
+  const ignoreLocations = [options.source, options.destination].filter(Boolean);
+  const useEvents = getActionUseEvents(action.id, times, ignoreLocations);
+
+  if (useEvents.length === 0) return { ok: true };
 
   const recast = action.recast || DEFAULT_GCD_SECONDS;
   if (action.charges) {
-    const recentUses = previousUses.filter(useTime => now - useTime < Math.max(0, recast - getRecastReduction(action.id, useTime, now)));
-    const firstBlockedUse = recentUses[0];
-    const remaining = firstBlockedUse === undefined ? 0 : Math.max(0, recast - getRecastReduction(action.id, firstBlockedUse, now) - (now - firstBlockedUse));
+    const candidate = { time: now, candidate: true };
+    const simulatedUses = [...useEvents, candidate].sort((a, b) => a.time - b.time || (a.candidate ? 1 : -1));
+
+    for (const currentUse of simulatedUses) {
+      const activeBeforeCurrentUse = simulatedUses
+        .filter(use => use !== currentUse && use.time < currentUse.time)
+        .filter(use => cooldownActiveAt(action.id, use.time, currentUse.time, recast));
+
+      if (activeBeforeCurrentUse.length >= action.charges) {
+        if (currentUse.candidate) {
+          const firstBlockedUse = activeBeforeCurrentUse[0];
+          const remaining = Math.max(0, recast - getRecastReduction(action.id, firstBlockedUse.time, now) - (now - firstBlockedUse.time));
+          return { ok: false, message: `充能中，约 ${Math.ceil(remaining)} 秒后可用` };
+        }
+        return { ok: false, message: `会导致后续 ${formatTime(currentUse.time)} 的${action.cn}充能不足` };
+      }
+    }
+
+    return { ok: true };
+  }
+
+  const previousUse = useEvents.filter(use => use.time < now).at(-1);
+  if (previousUse && cooldownActiveAt(action.id, previousUse.time, now, recast)) {
+    const effectiveRecast = Math.max(0, recast - getRecastReduction(action.id, previousUse.time, now));
     return {
-      ok: recentUses.length < action.charges,
-      message: `充能中，约 ${Math.ceil(remaining)} 秒后可用`
+      ok: false,
+      message: `CD中，约 ${Math.ceil(effectiveRecast - (now - previousUse.time))} 秒后可用`
     };
   }
 
-  const lastUse = Math.max(...previousUses);
-  const effectiveRecast = Math.max(0, recast - getRecastReduction(action.id, lastUse, now));
-  return {
-    ok: now - lastUse >= effectiveRecast,
-    message: `CD中，约 ${Math.ceil(effectiveRecast - (now - lastUse))} 秒后可用`
-  };
+  const nextUse = useEvents.find(use => use.time > now);
+  if (nextUse && cooldownActiveAt(action.id, now, nextUse.time, recast)) {
+    const effectiveRecast = Math.max(0, recast - getRecastReduction(action.id, now, nextUse.time));
+    return {
+      ok: false,
+      message: `会卡到后续 ${formatTime(nextUse.time)} 的${action.cn}，需要至少间隔 ${Number(effectiveRecast.toFixed(1))} 秒`
+    };
+  }
+
+  return { ok: true };
 }
 
 function renderPalette() {
@@ -521,7 +579,8 @@ function handleDrop(event, columnIndex, kind, ogcdIndex) {
     return;
   }
 
-  const availability = getAvailability(action, columnIndex, times);
+  const destination = { columnIndex, kind, ogcdIndex: ogcdIndex ?? null };
+  const availability = getAvailability(action, columnIndex, times, { kind, ogcdIndex: ogcdIndex ?? null, source, destination });
   if (!availability.ok) {
     showToast(`${action.cn} ${availability.message}，不能放在 ${formatTime(timeOf(columnIndex, times))}。`);
     return;
