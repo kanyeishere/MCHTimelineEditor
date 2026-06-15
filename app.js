@@ -121,6 +121,19 @@ function enableHorizontalWheelScroll() {
   }, { passive: false });
 }
 
+function enableTimelineGridClicks() {
+  elements.grid.addEventListener('click', event => {
+    const buffBadge = event.target.closest('.buff-badge[data-action-id]');
+    if (!buffBadge) return;
+
+    event.stopPropagation();
+    const column = buffBadge.closest('.timeline-column');
+    const columnIndex = Number(column?.dataset.columnIndex);
+    if (!Number.isInteger(columnIndex)) return;
+    addMajorCooldownAction(buffBadge.dataset.actionId, columnIndex);
+  });
+}
+
 function clampResource(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return 0;
@@ -181,7 +194,7 @@ function ensurePlanCoversTimelineTail() {
   let times = getTimelineTimes();
   const lastGcdIndex = getLastGcdIndex();
   const desiredEnd = lastGcdIndex >= 0
-    ? Math.max(INITIAL_MAX_TIME_SECONDS, timeOf(lastGcdIndex, times) + TIMELINE_TAIL_SECONDS)
+    ? Math.max(INITIAL_MAX_TIME_SECONDS, timeOf(lastGcdIndex, times) + getColumnBaseDuration(plan[lastGcdIndex]) + TIMELINE_TAIL_SECONDS)
     : INITIAL_MAX_TIME_SECONDS;
 
   while (getTimelineEndTime(times) < desiredEnd) {
@@ -297,23 +310,30 @@ function simulateChargeState(actionId, atTime, useTimes, facts) {
   const recoveryEvents = [];
   let blockedUseTime = null;
 
-  const recoverUntil = limitTime => {
-    while (nextRecoveryTime !== null && nextRecoveryTime <= limitTime) {
+  const recoverUntil = (limitTime, includeEqual = true) => {
+    while (nextRecoveryTime !== null && (includeEqual ? nextRecoveryTime <= limitTime : nextRecoveryTime < limitTime)) {
       charges = Math.min(maxCharges, charges + 1);
       recoveryEvents.push(nextRecoveryTime);
-      if (charges >= maxCharges) nextRecoveryTime = null;
-      else nextRecoveryTime = getChargeRecoveryTime(actionId, nextRecoveryTime, facts);
+      nextRecoveryTime = charges >= maxCharges
+        ? null
+        : getChargeRecoveryTime(actionId, nextRecoveryTime, facts);
     }
   };
 
   useTimes.filter(useTime => useTime <= atTime).sort((a, b) => a - b).forEach(useTime => {
-    recoverUntil(useTime);
+    recoverUntil(useTime, false);
     if (charges <= 0) {
       blockedUseTime ??= useTime;
       return;
     }
+
+    const wasCapped = charges >= maxCharges;
     charges -= 1;
-    if (nextRecoveryTime === null) nextRecoveryTime = getChargeRecoveryTime(actionId, useTime, facts);
+    if (wasCapped) {
+      nextRecoveryTime = getChargeRecoveryTime(actionId, useTime, facts);
+    } else if (nextRecoveryTime !== null && nextRecoveryTime <= useTime) {
+      nextRecoveryTime = getChargeRecoveryTime(actionId, nextRecoveryTime, facts);
+    }
   });
 
   recoverUntil(atTime);
@@ -805,6 +825,7 @@ function renderTimeline() {
     const element = document.createElement('div');
     const gapAfter = getColumnGapAfter(column);
     element.className = `timeline-column ${columnIndex === currentColumnIndex ? 'current-column' : ''}`;
+    element.dataset.columnIndex = String(columnIndex);
     element.innerHTML = `
       <div class="time-label">${formatTime(timeOf(columnIndex, times))}</div>
       ${renderMajorCooldownCell(majorCooldownBuckets[columnIndex])}
@@ -818,12 +839,6 @@ function renderTimeline() {
       </div>
     `;
     element.querySelectorAll('.major-cd-badge').forEach(badge => {
-      badge.addEventListener('click', event => {
-        event.stopPropagation();
-        addMajorCooldownAction(badge.dataset.actionId, columnIndex);
-      });
-    });
-    element.querySelectorAll('.buff-badge[data-action-id]').forEach(badge => {
       badge.addEventListener('click', event => {
         event.stopPropagation();
         addMajorCooldownAction(badge.dataset.actionId, columnIndex);
@@ -1298,6 +1313,7 @@ function importTimeline(file) {
       initialResources = normalizeImportedResources(imported);
       updateInitialResourceInputs();
       plan = normalizeImportedPlan(imported);
+      ensurePlanCoversTimelineTail();
       const removed = sanitizeCurrentPlan();
       showToast(removed ? `已导入 ${file.name}，并移除了 ${removed} 个缺少预备/资源的非法技能。` : `已导入 ${file.name}。`);
       renderTimeline();
@@ -1338,6 +1354,7 @@ elements.reset.addEventListener('click', () => {
 });
 
 enableHorizontalWheelScroll();
+enableTimelineGridClicks();
 updateInitialResourceInputs();
 renderPalette();
 renderTimeline();
