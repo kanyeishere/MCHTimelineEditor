@@ -120,10 +120,12 @@ p { margin: 0; }
 .timeline-column { width: var(--timeline-column-width); display: grid; grid-template-rows: 28px 54px 40px 32px 32px 32px 88px 60px 45px 45px 45px 62px 62px; border-right: 1px solid #d0d0d0; }
 .timeline-column:nth-child(2n) { background: #eef3ff; }
 .timeline-column.current-column { box-shadow: inset 0 0 0 2px #f0c847; }
-.timeline-column.phase-gap-after { box-shadow: inset -3px 0 0 #ff7b22; }
-.timeline-column.current-column.phase-gap-after { box-shadow: inset 0 0 0 2px #f0c847, inset -3px 0 0 #ff7b22; }
 .time-label { position: relative; padding: 6px; font-size: 12px; border-bottom: 1px solid #c8c8c8; }
-.gap-badge { position: absolute; left: 50%; bottom: -20px; z-index: 4; transform: translateX(-50%); white-space: nowrap; border: 1px solid #e36b14; border-radius: 999px; background: #fff3dd; color: #823600; font-size: 10px; font-weight: 800; padding: 1px 5px; cursor: pointer; box-shadow: 0 1px 4px #0002; }
+.transition-column { width: max(54px, calc(var(--timeline-column-width) * .82)); border-inline: 2px solid #ff7b22; background: repeating-linear-gradient(135deg, #fff3dd 0 9px, #ffe6bf 9px 18px); }
+.transition-cell { grid-row: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; width: 100%; height: 100%; border: 0; border-radius: 0; background: transparent; color: #823600; cursor: pointer; font-weight: 900; }
+.transition-cell strong { writing-mode: vertical-rl; letter-spacing: 2px; font-size: 15px; }
+.transition-cell span { padding: 2px 6px; border-radius: 999px; background: #fff8e9; border: 1px solid #e36b14; font-size: 11px; }
+.transition-cell small { writing-mode: vertical-rl; color: #9b4a08; font-size: 10px; font-weight: 700; }
 .major-cd-row { display: flex; flex-wrap: wrap; gap: 2px; align-content: center; justify-content: center; padding: 3px; border-bottom: 1px solid #c8c8c8; background: linear-gradient(#fff9e9, #f4ead2); overflow: hidden; }
 .major-cd-badge { position: relative; display: grid; place-items: center; inline-size: 18px; block-size: 18px; border-radius: 6px; background: #2d2616; box-shadow: 0 0 0 1px #d7bc62, 0 2px 5px #0005; }
 .major-cd-badge img { inline-size: 16px; block-size: 16px; object-fit: cover; border-radius: 5px; }

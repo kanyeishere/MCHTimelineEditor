@@ -117,7 +117,7 @@ function enableHorizontalWheelScroll() {
 }
 
 function createEmptyPlan() {
-  return Array.from({ length: SLOT_COUNT }, () => ({ gcd: null, ogcds: [null, null, null], gapAfter: 0 }));
+  return Array.from({ length: SLOT_COUNT }, () => ({ gcd: null, ogcds: [null, null, null], gapAfter: 0, gapName: '转场' }));
 }
 
 function getColumnGcdDuration(column) {
@@ -128,6 +128,20 @@ function getColumnGcdDuration(column) {
 function getColumnGapAfter(column) {
   const gap = Number(column?.gapAfter || 0);
   return Number.isFinite(gap) && gap > 0 ? gap : 0;
+}
+
+function getColumnBaseDuration(column) {
+  const action = actionsById[column.gcd];
+  return action?.gcdDuration || DEFAULT_GCD_SECONDS;
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 }
 
 
@@ -726,9 +740,9 @@ function renderTimeline() {
   plan.forEach((column, columnIndex) => {
     const element = document.createElement('div');
     const gapAfter = getColumnGapAfter(column);
-    element.className = `timeline-column ${columnIndex === currentColumnIndex ? 'current-column' : ''} ${gapAfter ? 'phase-gap-after' : ''}`;
+    element.className = `timeline-column ${columnIndex === currentColumnIndex ? 'current-column' : ''}`;
     element.innerHTML = `
-      <div class="time-label">${formatTime(timeOf(columnIndex, times))}${gapAfter ? `<button class="gap-badge" type="button" title="点击修改/清除：当前GCD结束后转场空白 ${formatTime(gapAfter)}">转场 +${formatTime(gapAfter)}</button>` : ''}</div>
+      <div class="time-label">${formatTime(timeOf(columnIndex, times))}</div>
       ${renderMajorCooldownCell(majorCooldownBuckets[columnIndex])}
       ${renderBuffCell(derivedState[columnIndex].activeBuffs)}
       <div class="charge-row reassemble-row" title="整备层数 ${derivedState[columnIndex].reassembleCharges} / 2"><i style="width:${(derivedState[columnIndex].reassembleCharges / 2) * 100}%"></i></div>
@@ -739,13 +753,6 @@ function renderTimeline() {
         <i class="battery-bar" title="电量 ${derivedState[columnIndex].battery} / 100" style="height:${derivedState[columnIndex].battery}%"></i>
       </div>
     `;
-    const gapBadge = element.querySelector('.gap-badge');
-    if (gapBadge) {
-      gapBadge.addEventListener('click', event => {
-        event.stopPropagation();
-        editTransitionGap(columnIndex);
-      });
-    }
     element.querySelectorAll('.major-cd-badge').forEach(badge => {
       badge.addEventListener('click', event => {
         event.stopPropagation();
@@ -761,8 +768,26 @@ function renderTimeline() {
     element.append(createRobotSlot(robotBuckets[columnIndex][0], buffWindows, columnRobotSummons, robotActive, 0));
     element.append(createRobotSlot(robotBuckets[columnIndex][1], buffWindows, columnRobotSummons, robotActive, 1));
     fragment.append(element);
+    if (gapAfter) fragment.append(createTransitionColumn(columnIndex, gapAfter, column.gapName, times));
   });
   elements.grid.append(fragment);
+}
+
+function createTransitionColumn(columnIndex, gapAfter, gapName, times) {
+  const start = timeOf(columnIndex, times) + getColumnBaseDuration(plan[columnIndex]);
+  const end = start + gapAfter;
+  const label = String(gapName || '转场').trim() || '转场';
+  const element = document.createElement('div');
+  element.className = 'timeline-column transition-column';
+  element.innerHTML = `
+    <button class="transition-cell" type="button" title="点击修改/清除 ${escapeHtml(label)}：${formatTime(start)} → ${formatTime(end)}">
+      <strong>${escapeHtml(label)}</strong>
+      <span>+${formatTime(gapAfter)}</span>
+      <small>${formatTime(start)} → ${formatTime(end)}</small>
+    </button>
+  `;
+  element.querySelector('.transition-cell').addEventListener('click', () => editTransitionGap(columnIndex));
+  return element;
 }
 
 function renderBuffCell(activeBuffs) {
@@ -980,10 +1005,19 @@ function editTransitionGap(columnIndex = getCurrentColumnIndex()) {
     return;
   }
 
-  plan[index].gapAfter = Math.round(seconds * 10) / 10;
+  const roundedSeconds = Math.round(seconds * 10) / 10;
+  let gapName = plan[index].gapName || '转场';
+  if (roundedSeconds > 0) {
+    const nameInput = prompt('请输入这段空白/转场的名字，例如 P2转场、Boss上天。', gapName);
+    if (nameInput === null) return;
+    gapName = nameInput.trim().slice(0, 20) || '转场';
+  }
+
+  plan[index].gapAfter = roundedSeconds;
+  plan[index].gapName = gapName;
   renderTimeline();
   showToast(plan[index].gapAfter
-    ? `已在 ${formatTime(timeOf(index))} 的GCD结束后添加 ${formatTime(plan[index].gapAfter)} 转场空白。`
+    ? `已在 ${formatTime(timeOf(index))} 的GCD结束后添加 ${gapName} ${formatTime(plan[index].gapAfter)}。`
     : `已清除 ${formatTime(timeOf(index))} 后的转场空白。`);
 }
 
@@ -1093,7 +1127,8 @@ function normalizeImportedPlan(imported) {
       : [null, null, null];
     while (ogcds.length < 3) ogcds.push(null);
     const gapAfter = Number(column?.gapAfter || 0);
-    normalized[index] = { gcd, ogcds, gapAfter: Number.isFinite(gapAfter) && gapAfter > 0 ? Math.min(180, Math.round(gapAfter * 10) / 10) : 0 };
+    const gapName = typeof column?.gapName === 'string' ? column.gapName.trim().slice(0, 20) : '转场';
+    normalized[index] = { gcd, ogcds, gapAfter: Number.isFinite(gapAfter) && gapAfter > 0 ? Math.min(180, Math.round(gapAfter * 10) / 10) : 0, gapName: gapName || '转场' };
   });
   return normalized;
 }
