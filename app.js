@@ -317,16 +317,11 @@ function simulateChargeState(actionId, atTime, useTimes, facts) {
   };
 
   useTimes.filter(useTime => useTime <= atTime).sort((a, b) => a - b).forEach(useTime => {
-    recoverUntil(useTime, false);
+    recoverUntil(useTime);
     const availableCharges = maxCharges - recoveryQueue.length;
     if (availableCharges <= 0) {
       blockedUseTime ??= useTime;
       return;
-    }
-
-    if (recoveryQueue.length && recoveryQueue[0] <= useTime) {
-      recoveryQueue[0] = getChargeRecoveryTime(actionId, recoveryQueue[0], facts);
-      recoveryQueue.sort((a, b) => a - b);
     }
 
     const cooldownStartTime = recoveryQueue.length ? recoveryQueue[recoveryQueue.length - 1] : useTime;
@@ -572,6 +567,7 @@ function deriveState(times = getTimelineTimes(), facts = collectTimelineFacts(ti
   const resources = getInitialResourceState();
   derivedState = plan.map((column, columnIndex) => {
     const baseTime = timeOf(columnIndex, times);
+    const activeBuffs = getActiveBuffs(resources, baseTime);
     if (column.gcd) applyResourceChange(resources, column.gcd, baseTime);
     column.ogcds.forEach((actionId, ogcdIndex) => {
       if (actionId) applyResourceChange(resources, actionId, baseTime + ((ogcdIndex + 1) * 0.6));
@@ -581,7 +577,7 @@ function deriveState(times = getTimelineTimes(), facts = collectTimelineFacts(ti
     return {
       heat: resources.heat,
       battery: resources.battery,
-      activeBuffs: getActiveBuffs(resources, columnTime),
+      activeBuffs,
       reassembleCharges: getAvailableChargesAtWithFacts('reassemble', columnTime, facts),
       doubleCheckCharges: getAvailableChargesAtWithFacts('double-check', columnTime, facts),
       checkmateCharges: getAvailableChargesAtWithFacts('checkmate', columnTime, facts)
