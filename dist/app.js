@@ -72,6 +72,15 @@ const elements = {
   importPlan: document.getElementById('importPlan')
 };
 
+function enableHorizontalWheelScroll() {
+  const timeline = document.querySelector('.timeline');
+  timeline.addEventListener('wheel', event => {
+    if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+    event.preventDefault();
+    timeline.scrollLeft += event.deltaY;
+  }, { passive: false });
+}
+
 function createEmptyPlan() {
   return Array.from({ length: SLOT_COUNT }, () => ({ gcd: null, ogcds: [null, null, null] }));
 }
@@ -240,8 +249,10 @@ function renderPalette() {
 
   document.querySelectorAll('.skill-card').forEach(card => {
     card.addEventListener('dragstart', event => {
+      document.body.classList.add('dragging');
       event.dataTransfer.setData('text/plain', card.dataset.id);
     });
+    card.addEventListener('dragend', () => document.body.classList.remove('dragging'));
   });
 }
 
@@ -307,6 +318,8 @@ function renderTimeline() {
     element.className = 'timeline-column';
     element.innerHTML = `
       <div class="time-label">${formatTime(timeOf(columnIndex, times))}</div>
+      <div class="charge-row double-row" title="双将层数 ${derivedState[columnIndex].doubleCheckCharges} / 3"><i style="width:${(derivedState[columnIndex].doubleCheckCharges / 3) * 100}%"></i></div>
+      <div class="charge-row check-row" title="将死层数 ${derivedState[columnIndex].checkmateCharges} / 3"><i style="width:${(derivedState[columnIndex].checkmateCharges / 3) * 100}%"></i></div>
       <div class="resource-bars" title="热量 ${derivedState[columnIndex].heat} / 100｜电量 ${derivedState[columnIndex].battery} / 100">
         <i class="heat-bar" title="热量 ${derivedState[columnIndex].heat} / 100" style="height:${derivedState[columnIndex].heat}%"></i>
         <i class="battery-bar" title="电量 ${derivedState[columnIndex].battery} / 100" style="height:${derivedState[columnIndex].battery}%"></i>
@@ -316,7 +329,8 @@ function renderTimeline() {
     [0, 1, 2].forEach(slotIndex => {
       element.append(createSlot(columnIndex, 'ogcd', slotIndex, column.ogcds[slotIndex], slotIndex >= maxOgcdSlotsFor(column), timeOf(columnIndex, times) + ((slotIndex + 1) * 0.6), buffWindows));
     });
-    element.append(createRobotSlot(columnIndex, times, buffWindows));
+    element.append(createRobotSlot(columnIndex, times, buffWindows, 0));
+    element.append(createRobotSlot(columnIndex, times, buffWindows, 1));
     elements.grid.append(element);
   });
 }
@@ -331,7 +345,13 @@ function createSlot(columnIndex, kind, ogcdIndex, actionId, disabled = false, re
 
   if (actionId) {
     const action = actionsById[actionId];
-    slot.innerHTML = `<span class="placed-action ${isInBuffWindow(releaseTime, buffWindows) ? 'buffed-action' : ''}"><small>${formatTime(releaseTime)}</small><img class="placed-icon ${action.gcdDuration === 1.5 ? 'short-gcd' : ''}" src="${action.icon}" alt="${action.cn}" title="点击移除 ${action.cn}"></span>`;
+    slot.innerHTML = `<span class="placed-action ${isInBuffWindow(releaseTime, buffWindows) ? 'buffed-action' : ''}" draggable="true"><small>${formatTime(releaseTime)}</small><img class="placed-icon ${action.gcdDuration === 1.5 ? 'short-gcd' : ''}" src="${action.icon}" alt="${action.cn}" title="拖动移动，点击移除 ${action.cn}"></span>`;
+    slot.querySelector('.placed-action').addEventListener('dragstart', event => {
+      document.body.classList.add('dragging');
+      event.dataTransfer.setData('text/plain', action.id);
+      event.dataTransfer.setData('application/x-mch-source', JSON.stringify({ columnIndex, kind, ogcdIndex }));
+    });
+    slot.querySelector('.placed-action').addEventListener('dragend', () => document.body.classList.remove('dragging'));
     slot.addEventListener('click', () => {
       if (kind === 'gcd') plan[columnIndex].gcd = null;
       else plan[columnIndex].ogcds[ogcdIndex] = null;
@@ -354,12 +374,12 @@ function getRobotEvents(times = getTimelineTimes()) {
   return events;
 }
 
-function createRobotSlot(columnIndex, times, buffWindows) {
+function createRobotSlot(columnIndex, times, buffWindows, rowIndex) {
   const slot = document.createElement('div');
-  slot.className = 'timeline-slot robot-slot';
+  slot.className = `timeline-slot robot-slot robot-slot-${rowIndex + 1}`;
   const start = timeOf(columnIndex, times);
   const end = timeOf(columnIndex + 1, times);
-  const events = getRobotEvents(times).filter(event => event.time >= start && event.time < end);
+  const events = getRobotEvents(times).filter((event, eventIndex) => event.time >= start && event.time < end && eventIndex % 2 === rowIndex);
   slot.innerHTML = events.map(event => {
     const action = actionsById[event.actionId];
     return `<span class="placed-action robot-action ${isInBuffWindow(event.time, buffWindows) ? 'buffed-action' : ''}"><small>${formatTime(event.time)}</small><img class="placed-icon" src="${action.icon}" alt="${action.cn}" title="${action.cn} ${formatTime(event.time)}"></span>`;
@@ -370,7 +390,10 @@ function createRobotSlot(columnIndex, times, buffWindows) {
 function handleDrop(event, columnIndex, kind, ogcdIndex) {
   event.preventDefault();
   const times = getTimelineTimes();
+  document.body.classList.remove('dragging');
   const action = actionsById[event.dataTransfer.getData('text/plain')];
+  const sourceText = event.dataTransfer.getData('application/x-mch-source');
+  const source = sourceText ? JSON.parse(sourceText) : null;
   if (!action) return;
 
   if (action.type === 'robot') {
@@ -408,6 +431,11 @@ function handleDrop(event, columnIndex, kind, ogcdIndex) {
   if ((action.battery || 0) < 0 && availableResources.battery < Math.abs(action.battery)) {
     showToast(`${action.cn} 需要 ${Math.abs(action.battery)} 电量，当前只有 ${availableResources.battery}。`);
     return;
+  }
+
+  if (source && !(source.columnIndex === columnIndex && source.kind === kind && source.ogcdIndex === ogcdIndex)) {
+    if (source.kind === 'gcd') plan[source.columnIndex].gcd = null;
+    else plan[source.columnIndex].ogcds[source.ogcdIndex] = null;
   }
 
   if (kind === 'gcd') {
@@ -491,5 +519,6 @@ elements.reset.addEventListener('click', () => {
   renderTimeline();
 });
 
+enableHorizontalWheelScroll();
 renderPalette();
 renderTimeline();
