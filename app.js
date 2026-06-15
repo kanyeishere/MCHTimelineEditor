@@ -28,14 +28,15 @@ const actions = [
   { id: 'heated-slug-shot', cn: '热独头弹', en: 'Heated Slug Shot', level: 60, type: 'gcd', category: '职业技能', recast: 2.5, range: '25米', radius: '0米', potency: 140, heat: 5, desc: '独头弹的强化版；连击成功时提高威力并增加热量。' },
   { id: 'dismantle', cn: '武装解除', en: 'Dismantle', level: 62, type: 'ogcd', category: '职业技能', recast: 120, range: '25米', radius: '0米', desc: '降低目标造成的伤害。' },
   { id: 'heated-clean-shot', cn: '热狙击弹', en: 'Heated Clean Shot', level: 64, type: 'gcd', category: '职业技能', recast: 2.5, range: '25米', radius: '0米', potency: 160, heat: 5, battery: 10, desc: '狙击弹的强化版；连击成功时热量 +5、电量 +10。' },
-  { id: 'barrel-stabilizer', cn: '枪管加热', en: 'Barrel Stabilizer', level: 66, type: 'ogcd', category: '职业技能', recast: 120, heat: 50, range: '0米', radius: '0米', desc: '增加热量50。' },
+  { id: 'barrel-stabilizer', cn: '枪管加热', en: 'Barrel Stabilizer', level: 66, type: 'ogcd', category: '职业技能', recast: 120, barrelPrepDuration: 30, range: '0米', radius: '0米', desc: '对自身附加超荷预备状态，30秒内可以免费发动一次超荷且不消耗热量。' },
   { id: 'blazing-shot', cn: '烈焰弹', en: 'Blazing Shot', level: 68, type: 'gcd', category: '职业技能', recast: 1.5, range: '25米', radius: '0米', potency: 220, desc: '热冲击的强化版；过热时可用，复唱1.5秒。追加效果：双将和将死的复唱时间缩短15秒。' },
   { id: 'flamethrower', cn: '火焰喷射器', en: 'Flamethrower', level: 70, type: 'ogcd', category: '职业技能', recast: 60, range: '0米', radius: '8米', desc: '持续向前方范围喷射火焰。移动或转身会取消。' },
   { id: 'bioblaster', cn: '毒菌冲击', en: 'Bioblaster', level: 72, type: 'gcd', category: '职业技能', recast: 20, range: '12米', radius: '12米', potency: 50, desc: '范围战技并附加持续伤害；与钻头共享用途场景。' },
   { id: 'air-anchor', cn: '空气锚', en: 'Air Anchor', level: 76, type: 'gcd', category: '职业技能', recast: 40, range: '25米', radius: '0米', potency: 660, battery: 20, desc: '热弹的强化版；不与其他战技共享复唱。追加效果：电量 +20。' },
   { id: 'automaton-queen', cn: '后式自走人偶', en: 'Automaton Queen', level: 80, type: 'ogcd', category: '职业技能', recast: 6, batteryCostMin: 50, drainBattery: true, range: '0米', radius: '0米', desc: '电量50以上发动，召唤后会耗尽当前全部电量。4.5秒后开始机器人连段。' },
+  { id: 'scattergun', cn: '霰弹枪', en: 'Scattergun', level: 82, type: 'gcd', category: '职业技能', recast: 2.5, range: '12米', radius: '12米', potency: 130, heat: 10, desc: '向目标所在方向发出扇形范围物理攻击。追加效果：获得10点枪管热度。' },
   { id: 'pile-bunker', cn: '铁臂拳', en: 'Pile Bunker', level: 80, type: 'robot', category: '机器人', recast: 1.5, range: '3米', radius: '0米', potency: 680, desc: '后式自走人偶自动执行的攻击。' },
-  { id: 'roller-dash', cn: '滚轮冲', en: 'Roller Dash', level: 80, type: 'ogcd', category: '职业技能', recast: 3, range: '0米', radius: '0米', desc: '后式自走人偶突进到目标附近。' },
+  { id: 'roller-dash', hidden: true, cn: '滚轮冲', en: 'Roller Dash', level: 80, type: 'ogcd', category: '职业技能', recast: 3, range: '0米', radius: '0米', desc: '后式自走人偶突进到目标附近。' },
   { id: 'crowned-collider', cn: '王室对撞机', en: 'Crowned Collider', level: 86, type: 'robot', category: '机器人', recast: 1, range: '3米', radius: '0米', potency: 780, desc: '后式自走人偶自动执行的终结攻击。' },
   { id: 'chain-saw', cn: '回转飞锯', en: 'Chain Saw', level: 90, type: 'gcd', category: '职业技能', recast: 60, range: '25米', radius: '25米直线', potency: 660, battery: 20, desc: '直线范围战技；追加效果：电量 +20。' },
   { id: 'double-check', cn: '双将', en: 'Double Check', level: 92, type: 'ogcd', category: '职业技能', recast: 30, charges: 3, range: '25米', radius: '0米', potency: 160, desc: '虹吸弹的强化版。最大档数：3。' },
@@ -57,6 +58,7 @@ const actions = [
 const actionsById = Object.fromEntries(actions.map(action => [action.id, action]));
 let plan = createEmptyPlan();
 let derivedState = [];
+let selectedColumnIndex = null;
 
 const elements = {
   palette: document.getElementById('palette'),
@@ -70,7 +72,9 @@ const elements = {
   checkNow: document.getElementById('checkNow'),
   reset: document.getElementById('reset'),
   exportPlan: document.getElementById('exportPlan'),
-  importPlan: document.getElementById('importPlan')
+  importPlan: document.getElementById('importPlan'),
+  addBasicCombo: document.getElementById('addBasicCombo'),
+  addOverheatCombo: document.getElementById('addOverheatCombo')
 };
 
 function enableHorizontalWheelScroll() {
@@ -283,6 +287,40 @@ function bucketRobotEventsByColumn(events, times) {
   return buckets;
 }
 
+
+function getLastGcdIndex() {
+  for (let index = plan.length - 1; index >= 0; index -= 1) {
+    if (actionsById[plan[index].gcd]?.type === 'gcd') return index;
+  }
+  return -1;
+}
+
+function getCurrentColumnIndex() {
+  const lastGcdIndex = getLastGcdIndex();
+  const fallbackIndex = lastGcdIndex >= 0 ? lastGcdIndex : 0;
+  return Math.max(0, Math.min(plan.length - 1, selectedColumnIndex ?? fallbackIndex));
+}
+
+function selectColumn(columnIndex) {
+  selectedColumnIndex = Math.max(0, Math.min(plan.length - 1, columnIndex));
+  renderTimeline();
+}
+
+function findNextEmptyGcdSlot(startIndex) {
+  for (let index = Math.max(0, startIndex); index < plan.length; index += 1) {
+    if (!plan[index].gcd) return index;
+  }
+  return -1;
+}
+
+function findFirstEmptyOgcdSlot(columnIndex) {
+  const maxSlots = maxOgcdSlotsFor(plan[columnIndex]);
+  for (let index = 0; index < maxSlots; index += 1) {
+    if (!plan[columnIndex].ogcds[index]) return index;
+  }
+  return -1;
+}
+
 function getBuffWindows(times = getTimelineTimes()) {
   const windows = [];
   plan.forEach((column, columnIndex) => {
@@ -301,46 +339,68 @@ function isInBuffWindow(releaseTime, buffWindows) {
 }
 
 
-function applyResourceChange(resources, actionId) {
+function isBarrelPrepActive(resources, releaseTime) {
+  return (resources.barrelPrepUntil || -Infinity) >= releaseTime;
+}
+
+function getEffectiveHeatChange(action, resources, releaseTime) {
+  if (action.id === 'hypercharge' && isBarrelPrepActive(resources, releaseTime)) return 0;
+  return action.heat || 0;
+}
+
+function applyResourceChange(resources, actionId, releaseTime = START_TIME_SECONDS) {
   const action = actionsById[actionId];
   if (!action) return resources;
-  resources.heat = Math.max(0, Math.min(100, resources.heat + (action.heat || 0)));
+
+  if (action.barrelPrepDuration) resources.barrelPrepUntil = releaseTime + action.barrelPrepDuration;
+
+  const heatChange = getEffectiveHeatChange(action, resources, releaseTime);
+  resources.heat = Math.max(0, Math.min(100, resources.heat + heatChange));
+  if (action.id === 'hypercharge' && isBarrelPrepActive(resources, releaseTime)) resources.barrelPrepUntil = null;
+
   if (action.drainBattery) resources.battery = 0;
   else resources.battery = Math.max(0, Math.min(100, resources.battery + (action.battery || 0)));
   return resources;
 }
 
-function getResourcesBefore(columnIndex, kind, ogcdIndex = 0) {
-  const resources = { heat: 0, battery: 0 };
+function getResourcesBefore(columnIndex, kind, ogcdIndex = 0, times = getTimelineTimes()) {
+  const resources = { heat: 0, battery: 0, barrelPrepUntil: null };
 
   for (let index = 0; index < columnIndex; index += 1) {
     const column = plan[index];
-    [column.gcd, ...column.ogcds].filter(Boolean).forEach(actionId => applyResourceChange(resources, actionId));
+    const baseTime = timeOf(index, times);
+    if (column.gcd) applyResourceChange(resources, column.gcd, baseTime);
+    column.ogcds.forEach((actionId, placedOgcdIndex) => {
+      if (actionId) applyResourceChange(resources, actionId, baseTime + ((placedOgcdIndex + 1) * 0.6));
+    });
   }
 
   const column = plan[columnIndex];
+  const baseTime = timeOf(columnIndex, times);
   if (kind === 'ogcd') {
-    if (column.gcd) applyResourceChange(resources, column.gcd);
-    column.ogcds.slice(0, ogcdIndex).filter(Boolean).forEach(actionId => applyResourceChange(resources, actionId));
+    if (column.gcd) applyResourceChange(resources, column.gcd, baseTime);
+    column.ogcds.slice(0, ogcdIndex).forEach((actionId, placedOgcdIndex) => {
+      if (actionId) applyResourceChange(resources, actionId, baseTime + ((placedOgcdIndex + 1) * 0.6));
+    });
   }
 
   return resources;
 }
 
 function deriveState(times = getTimelineTimes(), facts = collectTimelineFacts(times)) {
-  let heat = 0;
-  let battery = 0;
+  const resources = { heat: 0, battery: 0, barrelPrepUntil: null };
   derivedState = plan.map((column, columnIndex) => {
-    [column.gcd, ...column.ogcds].filter(Boolean).forEach(actionId => {
-      const resources = applyResourceChange({ heat, battery }, actionId);
-      heat = resources.heat;
-      battery = resources.battery;
+    const baseTime = timeOf(columnIndex, times);
+    if (column.gcd) applyResourceChange(resources, column.gcd, baseTime);
+    column.ogcds.forEach((actionId, ogcdIndex) => {
+      if (actionId) applyResourceChange(resources, actionId, baseTime + ((ogcdIndex + 1) * 0.6));
     });
 
     const columnTime = timeOf(columnIndex, times);
     return {
-      heat,
-      battery,
+      heat: resources.heat,
+      battery: resources.battery,
+      barrelPrepActive: isBarrelPrepActive(resources, columnTime),
       reassembleCharges: getAvailableChargesAtWithFacts('reassemble', columnTime, facts),
       doubleCheckCharges: getAvailableChargesAtWithFacts('double-check', columnTime, facts),
       checkmateCharges: getAvailableChargesAtWithFacts('checkmate', columnTime, facts)
@@ -489,6 +549,7 @@ function renderPalette() {
       event.dataTransfer.setData('text/plain', card.dataset.id);
     });
     card.addEventListener('dragend', () => document.body.classList.remove('dragging'));
+    card.addEventListener('click', () => addActionByClick(card.dataset.id));
   });
 }
 
@@ -539,7 +600,7 @@ function renderTimeline() {
   const robotBuckets = bucketRobotEventsByColumn(getRobotEventsFromFacts(facts), times);
   const majorCooldownBuckets = bucketEventsByColumn(getMajorCooldownEventsFromFacts(facts), times);
   deriveState(times, facts);
-  const lastState = derivedState.at(-1) || { heat: 0, battery: 0, reassembleCharges: 2, doubleCheckCharges: 3, checkmateCharges: 3 };
+  const lastState = derivedState.at(-1) || { heat: 0, battery: 0, barrelPrepActive: false, reassembleCharges: 2, doubleCheckCharges: 3, checkmateCharges: 3 };
   if (elements.heatNow) {
     elements.heatNow.textContent = lastState.heat;
     elements.heatNow.title = `当前热量：${lastState.heat} / 100`;
@@ -561,12 +622,14 @@ function renderTimeline() {
 
   elements.grid.innerHTML = '';
   const fragment = document.createDocumentFragment();
+  const currentColumnIndex = getCurrentColumnIndex();
   plan.forEach((column, columnIndex) => {
     const element = document.createElement('div');
-    element.className = 'timeline-column';
+    element.className = `timeline-column ${columnIndex === currentColumnIndex ? 'current-column' : ''}`;
     element.innerHTML = `
       <div class="time-label">${formatTime(timeOf(columnIndex, times))}</div>
       ${renderMajorCooldownCell(majorCooldownBuckets[columnIndex])}
+      <div class="barrel-prep-row" title="枪管加热预备 ${derivedState[columnIndex].barrelPrepActive ? '可免费超荷' : '未激活'}"><i style="width:${derivedState[columnIndex].barrelPrepActive ? 100 : 0}%"></i></div>
       <div class="charge-row reassemble-row" title="整备层数 ${derivedState[columnIndex].reassembleCharges} / 2"><i style="width:${(derivedState[columnIndex].reassembleCharges / 2) * 100}%"></i></div>
       <div class="charge-row double-row" title="双将层数 ${derivedState[columnIndex].doubleCheckCharges} / 3"><i style="width:${(derivedState[columnIndex].doubleCheckCharges / 3) * 100}%"></i></div>
       <div class="charge-row check-row" title="将死层数 ${derivedState[columnIndex].checkmateCharges} / 3"><i style="width:${(derivedState[columnIndex].checkmateCharges / 3) * 100}%"></i></div>
@@ -605,6 +668,10 @@ function createSlot(columnIndex, kind, ogcdIndex, actionId, disabled = false, re
     slot.addEventListener('drop', event => handleDrop(event, columnIndex, kind, ogcdIndex));
   }
 
+  if (!actionId && !disabled) {
+    slot.addEventListener('click', () => selectColumn(columnIndex));
+  }
+
   if (actionId) {
     const action = actionsById[actionId];
     slot.innerHTML = `<span class="placed-action ${isInBuffWindow(releaseTime, buffWindows) ? 'buffed-action' : ''}" draggable="true"><small>${formatTime(releaseTime)}</small><img class="placed-icon ${action.gcdDuration === 1.5 ? 'short-gcd' : ''}" src="${action.icon}" alt="${action.cn}" title="拖动移动，点击移除 ${action.cn}"></span>`;
@@ -634,9 +701,124 @@ function createRobotSlot(events, buffWindows) {
   return slot;
 }
 
+function placeAction(action, columnIndex, kind, ogcdIndex = null, source = null, options = {}) {
+  const times = getTimelineTimes();
+  const dropTime = timeOf(columnIndex, times);
+  const prepullGcdSlotAllowsOgcd = kind === 'gcd' && dropTime < 0 && action.type === 'ogcd';
+  if (action.type !== kind && !prepullGcdSlotAllowsOgcd) {
+    if (!options.silent) showToast(kind === 'gcd' ? '这里只能放战技（GCD）；但 -15s 到 0s 倒计时区间的GCD格可以放能力技。' : '每个GCD之间最多插入3个能力技能（oGCD）。');
+    return false;
+  }
+  if (kind === 'ogcd' && ogcdIndex >= maxOgcdSlotsFor(plan[columnIndex])) {
+    if (!options.silent) showToast('1.5秒短GCD后只能插入2个能力技能。');
+    return false;
+  }
+
+  const releaseTime = getReleaseTimeForPlacement(columnIndex, kind, ogcdIndex ?? null, times);
+  const destination = { columnIndex, kind, ogcdIndex: ogcdIndex ?? null };
+  const availability = getAvailability(action, columnIndex, times, { kind, ogcdIndex: ogcdIndex ?? null, source, destination });
+  if (!availability.ok) {
+    if (!options.silent) showToast(`${action.cn} ${availability.message}，不能放在 ${formatTime(releaseTime)}。`);
+    return false;
+  }
+
+  const availableResources = getResourcesBefore(columnIndex, kind, ogcdIndex || 0, times);
+  const heatChange = getEffectiveHeatChange(action, availableResources, releaseTime);
+  if (heatChange < 0 && availableResources.heat < Math.abs(heatChange)) {
+    if (!options.silent) showToast(`${action.cn} 需要 ${Math.abs(heatChange)} 热量，当前只有 ${availableResources.heat}。`);
+    return false;
+  }
+  if (action.batteryCostMin && availableResources.battery < action.batteryCostMin) {
+    if (!options.silent) showToast(`${action.cn} 至少需要 ${action.batteryCostMin} 电量，当前只有 ${availableResources.battery}，发动后会耗尽全部电量。`);
+    return false;
+  }
+  if ((action.battery || 0) < 0 && availableResources.battery < Math.abs(action.battery)) {
+    if (!options.silent) showToast(`${action.cn} 需要 ${Math.abs(action.battery)} 电量，当前只有 ${availableResources.battery}。`);
+    return false;
+  }
+
+  if (source && !isSameLocation(source, columnIndex, kind, ogcdIndex ?? null)) {
+    if (source.kind === 'gcd') plan[source.columnIndex].gcd = null;
+    else plan[source.columnIndex].ogcds[source.ogcdIndex] = null;
+  }
+  if (kind === 'gcd') {
+    plan[columnIndex].gcd = action.id;
+    if (action.gcdDuration === 1.5) plan[columnIndex].ogcds[2] = null;
+  } else {
+    plan[columnIndex].ogcds[ogcdIndex] = action.id;
+  }
+  selectedColumnIndex = columnIndex;
+  if (!options.skipRender) renderTimeline();
+  if (!options.silent) showToast(`${action.cn} 已放入 ${formatTime(releaseTime)}。`);
+  return true;
+}
+
+function addActionByClick(actionId) {
+  const action = actionsById[actionId];
+  if (!action || action.type === 'robot') return;
+  const columnIndex = getCurrentColumnIndex();
+  if (action.type === 'gcd') {
+    const targetIndex = plan[columnIndex].gcd ? findNextEmptyGcdSlot(columnIndex + 1) : columnIndex;
+    if (targetIndex < 0) return showToast('后续没有空的GCD格。');
+    placeAction(action, targetIndex, 'gcd');
+    return;
+  }
+  const ogcdIndex = findFirstEmptyOgcdSlot(columnIndex);
+  if (ogcdIndex < 0) return showToast('当前GCD下面没有空的能力技槽。');
+  placeAction(action, columnIndex, 'ogcd', ogcdIndex);
+}
+
+function addGcdSequence(actionIds, label) {
+  let nextIndex = findNextEmptyGcdSlot(getLastGcdIndex() + 1);
+  if (nextIndex < 0) return showToast('后续没有空的GCD格。');
+  const placed = [];
+  actionIds.forEach(actionId => {
+    const action = actionsById[actionId];
+    nextIndex = findNextEmptyGcdSlot(nextIndex);
+    if (action && nextIndex >= 0 && placeAction(action, nextIndex, 'gcd', null, null, { silent: true, skipRender: true })) {
+      placed.push(action.cn);
+      nextIndex += 1;
+    }
+  });
+  renderTimeline();
+  showToast(placed.length ? `已添加${label}：${placed.join(' → ')}。` : `${label}没有可放置的位置。`);
+}
+
+
+function addOverheatCombo() {
+  const lastGcdIndex = getLastGcdIndex();
+  if (lastGcdIndex < 0) return showToast('请先放置一个GCD技能，再添加过热连。');
+
+  const hyperchargeSlot = findFirstEmptyOgcdSlot(lastGcdIndex);
+  if (hyperchargeSlot < 0) return showToast('最后一个GCD下面没有空的能力技槽，不能添加过热连。');
+
+  let scanIndex = lastGcdIndex + 1;
+  const blazingSlots = [];
+  for (let count = 0; count < 5; count += 1) {
+    const nextSlot = findNextEmptyGcdSlot(scanIndex);
+    if (nextSlot < 0) return showToast('后续没有足够的空GCD格，不能添加完整过热连。');
+    blazingSlots.push(nextSlot);
+    scanIndex = nextSlot + 1;
+  }
+
+  const hypercharge = actionsById.hypercharge;
+  if (!placeAction(hypercharge, lastGcdIndex, 'ogcd', hyperchargeSlot, null, { skipRender: true })) {
+    renderTimeline();
+    return;
+  }
+
+  const placed = ['超荷'];
+  for (const slotIndex of blazingSlots) {
+    if (placeAction(actionsById['blazing-shot'], slotIndex, 'gcd', null, null, { silent: true, skipRender: true })) {
+      placed.push('烈焰弹');
+    }
+  }
+  renderTimeline();
+  showToast(`已添加过热连：${placed.join(' → ')}。`);
+}
+
 function handleDrop(event, columnIndex, kind, ogcdIndex) {
   event.preventDefault();
-  const times = getTimelineTimes();
   document.body.classList.remove('dragging');
   const action = actionsById[event.dataTransfer.getData('text/plain')];
   const sourceText = event.dataTransfer.getData('application/x-mch-source');
@@ -648,52 +830,7 @@ function handleDrop(event, columnIndex, kind, ogcdIndex) {
     return;
   }
 
-  const dropTime = timeOf(columnIndex, times);
-  const prepullGcdSlotAllowsOgcd = kind === 'gcd' && dropTime < 0 && action.type === 'ogcd';
-  if (action.type !== kind && !prepullGcdSlotAllowsOgcd) {
-    showToast(kind === 'gcd' ? '这里只能放战技（GCD）；但 -15s 到 0s 倒计时区间的GCD格可以放能力技。' : '每个GCD之间最多插入3个能力技能（oGCD）。');
-    return;
-  }
-
-  if (kind === 'ogcd' && ogcdIndex >= maxOgcdSlotsFor(plan[columnIndex])) {
-    showToast('1.5秒短GCD后只能插入2个能力技能。');
-    return;
-  }
-
-  const destination = { columnIndex, kind, ogcdIndex: ogcdIndex ?? null };
-  const availability = getAvailability(action, columnIndex, times, { kind, ogcdIndex: ogcdIndex ?? null, source, destination });
-  if (!availability.ok) {
-    showToast(`${action.cn} ${availability.message}，不能放在 ${formatTime(timeOf(columnIndex, times))}。`);
-    return;
-  }
-
-  const availableResources = getResourcesBefore(columnIndex, kind, ogcdIndex || 0);
-  if ((action.heat || 0) < 0 && availableResources.heat < Math.abs(action.heat)) {
-    showToast(`${action.cn} 需要 ${Math.abs(action.heat)} 热量，当前只有 ${availableResources.heat}。`);
-    return;
-  }
-  if (action.batteryCostMin && availableResources.battery < action.batteryCostMin) {
-    showToast(`${action.cn} 至少需要 ${action.batteryCostMin} 电量，当前只有 ${availableResources.battery}，发动后会耗尽全部电量。`);
-    return;
-  }
-  if ((action.battery || 0) < 0 && availableResources.battery < Math.abs(action.battery)) {
-    showToast(`${action.cn} 需要 ${Math.abs(action.battery)} 电量，当前只有 ${availableResources.battery}。`);
-    return;
-  }
-
-  if (source && !(source.columnIndex === columnIndex && source.kind === kind && source.ogcdIndex === ogcdIndex)) {
-    if (source.kind === 'gcd') plan[source.columnIndex].gcd = null;
-    else plan[source.columnIndex].ogcds[source.ogcdIndex] = null;
-  }
-
-  if (kind === 'gcd') {
-    plan[columnIndex].gcd = action.id;
-    if (action.gcdDuration === 1.5) plan[columnIndex].ogcds[2] = null;
-  } else {
-    plan[columnIndex].ogcds[ogcdIndex] = action.id;
-  }
-  showToast(`${action.cn} 已放入 ${formatTime(timeOf(columnIndex, times))}。`);
-  renderTimeline();
+  placeAction(action, columnIndex, kind, ogcdIndex, source);
 }
 
 function showToast(message) {
@@ -760,9 +897,12 @@ elements.importPlan.addEventListener('change', event => {
   const [file] = event.target.files;
   if (file) importTimeline(file);
 });
+elements.addBasicCombo.addEventListener('click', () => addGcdSequence(['heated-split-shot', 'heated-slug-shot', 'heated-clean-shot'], '基础连'));
+elements.addOverheatCombo.addEventListener('click', addOverheatCombo);
 
 elements.reset.addEventListener('click', () => {
   plan = createEmptyPlan();
+  selectedColumnIndex = null;
   showToast('已重置时间轴。');
   renderTimeline();
 });
