@@ -1,1 +1,1 @@
-{"scripts":{"build":"node --check app.js && mkdir -p dist && cp index.html app.js styles.css dist/","start":"python3 -m http.server 5173"},"dependencies":{},"devDependencies":{}}
+{"scripts":{"download-icons":"node scripts/download-icons.mjs","build":"node --check app.js && mkdir -p dist && cp index.html app.js styles.css dist/ && cp -R assets dist/","start":"python3 -m http.server 5173"},"dependencies":{},"devDependencies":{}}
