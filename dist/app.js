@@ -2,6 +2,7 @@ const DEFAULT_GCD_SECONDS = 2.5;
 const START_TIME_SECONDS = -15;
 const INITIAL_MAX_TIME_SECONDS = 20 * 60;
 const TIMELINE_TAIL_SECONDS = 240;
+const TIME_EPSILON = 1e-6;
 const INITIAL_SLOT_COUNT = Math.ceil((INITIAL_MAX_TIME_SECONDS - START_TIME_SECONDS) / DEFAULT_GCD_SECONDS) + 1;
 const ICON_BASE = 'https://ffxiv.gamerescape.com/wiki/Special:Redirect/file/';
 const MAJOR_COOLDOWN_IDS = ['drill', 'air-anchor', 'chain-saw', 'barrel-stabilizer', 'wildfire', 'dexterity-potion'];
@@ -311,15 +312,21 @@ function simulateChargeState(actionId, atTime, useTimes, facts) {
   let blockedUseTime = null;
 
   const recoverUntil = (limitTime, includeEqual = true) => {
-    while (recoveryQueue.length && (includeEqual ? recoveryQueue[0] <= limitTime : recoveryQueue[0] < limitTime)) {
+    while (recoveryQueue.length && (includeEqual ? recoveryQueue[0] <= limitTime + TIME_EPSILON : recoveryQueue[0] < limitTime - TIME_EPSILON)) {
       recoveryEvents.push(recoveryQueue.shift());
     }
   };
 
   useTimes.filter(useTime => useTime <= atTime).sort((a, b) => a - b).forEach(useTime => {
-    // 已经放在时间轴上的同一时刻使用与充能恢复，要先结算使用再结算恢复。
-    // 这样旧版导入轴里“钻头在恢复点同一列再次使用”时，不会把正在排队的下一次恢复吞掉。
+    // 同一时刻使用会先消耗已有层数，再处理该时刻恢复；如果正好踩在恢复点，
+    // 该恢复会被本次使用吃掉并顺延到下一轮，避免旧轴导入时把同一时间点错误算成额外层数。
     recoverUntil(useTime, false);
+    if (recoveryQueue.length && Math.abs(recoveryQueue[0] - useTime) <= TIME_EPSILON) {
+      const consumedRecoveryTime = recoveryQueue.shift();
+      const delayedRecoveryTime = getChargeRecoveryTime(actionId, consumedRecoveryTime, facts);
+      recoveryQueue.unshift(delayedRecoveryTime);
+    }
+
     const availableCharges = maxCharges - recoveryQueue.length;
     if (availableCharges <= 0) {
       blockedUseTime ??= useTime;
