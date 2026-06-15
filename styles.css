@@ -146,7 +146,9 @@ p { margin: 0; }
 .placed-action { display: grid; place-items: center; gap: 1px; }
 .placed-action small { color: #31528f; font-size: 10px; line-height: 1; }
 .placed-icon { cursor: pointer; }
-.robot-slot { background: #fff8e8; min-height: 56px; }
+.robot-slot { position: relative; background: #fff8e8; min-height: 56px; }
+.robot-active-slot { background: #d9ecff; }
+.robot-battery { position: absolute; top: 2px; left: 2px; z-index: 2; padding: 1px 4px; border-radius: 999px; color: #073763; background: #8fd0ff; border: 1px solid #3688c7; font-size: 10px; font-weight: 800; }
 .robot-slot:empty::after { content: ""; }
 .robot-action .placed-icon { border-color: #c3912e; }
 .buffed-action { padding: 2px; border-radius: 8px; background: linear-gradient(180deg, rgba(255,235,121,.75), rgba(255,126,36,.35)); box-shadow: 0 0 0 2px #f7d85d, 0 0 12px #ffcf33; }

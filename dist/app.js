@@ -690,6 +690,7 @@ function renderTimeline() {
   const facts = collectTimelineFacts(times);
   const buffWindows = getBuffWindows(times);
   const robotBuckets = bucketRobotEventsByColumn(getRobotEventsFromFacts(facts), times);
+  const robotSummons = getRobotSummons(times);
   const majorCooldownBuckets = bucketEventsByColumn(getMajorCooldownEventsFromFacts(facts), times);
   deriveState(times, facts);
   const lastState = derivedState.at(-1) || { heat: 0, battery: 0, activeBuffs: [], reassembleCharges: 2, doubleCheckCharges: 3, checkmateCharges: 3 };
@@ -740,8 +741,10 @@ function renderTimeline() {
     [0, 1, 2].forEach(slotIndex => {
       element.append(createSlot(columnIndex, 'ogcd', slotIndex, column.ogcds[slotIndex], slotIndex >= maxOgcdSlotsFor(column), timeOf(columnIndex, times) + ((slotIndex + 1) * 0.6), buffWindows));
     });
-    element.append(createRobotSlot(robotBuckets[columnIndex][0], buffWindows));
-    element.append(createRobotSlot(robotBuckets[columnIndex][1], buffWindows));
+    const columnRobotSummons = getColumnRobotSummons(columnIndex, times, robotSummons);
+    const robotActive = isRobotActiveInColumn(columnIndex, times, robotSummons);
+    element.append(createRobotSlot(robotBuckets[columnIndex][0], buffWindows, columnRobotSummons, robotActive, 0));
+    element.append(createRobotSlot(robotBuckets[columnIndex][1], buffWindows, columnRobotSummons, robotActive, 1));
     fragment.append(element);
   });
   elements.grid.append(fragment);
@@ -798,10 +801,37 @@ function createSlot(columnIndex, kind, ogcdIndex, actionId, disabled = false, re
   return slot;
 }
 
-function createRobotSlot(events, buffWindows) {
+
+function getRobotSummons(times = getTimelineTimes()) {
+  const summons = [];
+  plan.forEach((column, columnIndex) => {
+    column.ogcds.forEach((actionId, ogcdIndex) => {
+      if (actionId !== 'automaton-queen') return;
+      const start = timeOf(columnIndex, times) + ((ogcdIndex + 1) * 0.6);
+      const resources = getResourcesBefore(columnIndex, 'ogcd', ogcdIndex, times);
+      summons.push({ start, end: start + 10.5, battery: resources.battery });
+    });
+  });
+  return summons;
+}
+
+function getColumnRobotSummons(columnIndex, times, summons) {
+  const start = timeOf(columnIndex, times);
+  const end = timeOf(columnIndex + 1, times);
+  return summons.filter(summon => summon.start >= start && summon.start < end);
+}
+
+function isRobotActiveInColumn(columnIndex, times, summons) {
+  const start = timeOf(columnIndex, times);
+  const end = timeOf(columnIndex + 1, times);
+  return summons.some(summon => summon.start < end && summon.end >= start);
+}
+
+function createRobotSlot(events, buffWindows, summonStarts = [], active = false, rowIndex = 0) {
   const slot = document.createElement('div');
-  slot.className = 'timeline-slot robot-slot';
-  slot.innerHTML = events.map(event => {
+  slot.className = `timeline-slot robot-slot ${active ? 'robot-active-slot' : ''}`;
+  const summonBadges = rowIndex === 0 ? summonStarts.map(summon => `<span class="robot-battery" title="后式自走人偶消耗电量 ${summon.battery}">电${summon.battery}</span>`).join('') : '';
+  slot.innerHTML = summonBadges + events.map(event => {
     const action = actionsById[event.actionId];
     return `<span class="placed-action robot-action ${isInBuffWindow(event.time, buffWindows) ? 'buffed-action' : ''}"><small>${formatTime(event.time)}</small><img class="placed-icon" src="${action.icon}" alt="${action.cn}" title="${action.cn} ${formatTime(event.time)}"></span>`;
   }).join('');
