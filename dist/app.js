@@ -184,7 +184,7 @@ function collectTimelineFacts(times = getTimelineTimes()) {
     times,
     useTimesByAction,
     heatBlastTimes: useTimesByAction.get('heat-blast') || [],
-    blazingShotTimes: useTimesByAction.get('blazing-shot') || []
+    blazingShotTimes: [...(useTimesByAction.get('blazing-shot') || []), ...(useTimesByAction.get('heat-blast') || [])].sort((a, b) => a - b)
   };
 }
 
