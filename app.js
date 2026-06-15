@@ -83,6 +83,7 @@ const elements = {
   checkNow: document.getElementById('checkNow'),
   reset: document.getElementById('reset'),
   exportPlan: document.getElementById('exportPlan'),
+  sharePlan: document.getElementById('sharePlan'),
   importPlan: document.getElementById('importPlan'),
   addBasicCombo: document.getElementById('addBasicCombo'),
   addOverheatCombo: document.getElementById('addOverheatCombo'),
@@ -305,40 +306,41 @@ function getChargeRecoveryTime(actionId, cooldownStartTime, facts) {
 function simulateChargeState(actionId, atTime, useTimes, facts) {
   const action = actionsById[actionId];
   const maxCharges = action?.charges || 1;
-  let charges = maxCharges;
-  let nextRecoveryTime = null;
+  const recoveryQueue = [];
   const recoveryEvents = [];
   let blockedUseTime = null;
 
   const recoverUntil = (limitTime, includeEqual = true) => {
-    while (nextRecoveryTime !== null && (includeEqual ? nextRecoveryTime <= limitTime : nextRecoveryTime < limitTime)) {
-      charges = Math.min(maxCharges, charges + 1);
-      recoveryEvents.push(nextRecoveryTime);
-      nextRecoveryTime = charges >= maxCharges
-        ? null
-        : getChargeRecoveryTime(actionId, nextRecoveryTime, facts);
+    while (recoveryQueue.length && (includeEqual ? recoveryQueue[0] <= limitTime : recoveryQueue[0] < limitTime)) {
+      recoveryEvents.push(recoveryQueue.shift());
     }
   };
 
   useTimes.filter(useTime => useTime <= atTime).sort((a, b) => a - b).forEach(useTime => {
     recoverUntil(useTime, false);
-    if (charges <= 0) {
+    const availableCharges = maxCharges - recoveryQueue.length;
+    if (availableCharges <= 0) {
       blockedUseTime ??= useTime;
       return;
     }
 
-    const wasCapped = charges >= maxCharges;
-    charges -= 1;
-    if (wasCapped) {
-      nextRecoveryTime = getChargeRecoveryTime(actionId, useTime, facts);
-    } else if (nextRecoveryTime !== null && nextRecoveryTime <= useTime) {
-      nextRecoveryTime = getChargeRecoveryTime(actionId, nextRecoveryTime, facts);
+    if (recoveryQueue.length && recoveryQueue[0] <= useTime) {
+      recoveryQueue[0] = getChargeRecoveryTime(actionId, recoveryQueue[0], facts);
+      recoveryQueue.sort((a, b) => a - b);
     }
+
+    const cooldownStartTime = recoveryQueue.length ? recoveryQueue[recoveryQueue.length - 1] : useTime;
+    recoveryQueue.push(getChargeRecoveryTime(actionId, cooldownStartTime, facts));
   });
 
   recoverUntil(atTime);
 
-  return { charges, nextRecoveryTime, recoveryEvents, blockedUseTime };
+  return {
+    charges: maxCharges - recoveryQueue.length,
+    nextRecoveryTime: recoveryQueue[0] ?? null,
+    recoveryEvents,
+    blockedUseTime
+  };
 }
 
 function getAvailableChargesAtWithFacts(actionId, atTime, facts) {
@@ -1291,6 +1293,54 @@ function normalizeImportedPlan(imported) {
   return normalized;
 }
 
+function encodeTimelineForUrl(data) {
+  const json = JSON.stringify(data);
+  const utf8 = encodeURIComponent(json).replace(/%([0-9A-F]{2})/g, (_, hex) => String.fromCharCode(Number.parseInt(hex, 16)));
+  return btoa(utf8);
+}
+
+function decodeTimelineFromUrl(encoded) {
+  const binary = atob(encoded);
+  const percentEncoded = Array.from(binary, char => `%${char.charCodeAt(0).toString(16).padStart(2, '0')}`).join('');
+  return JSON.parse(decodeURIComponent(percentEncoded));
+}
+
+function loadTimelineData(imported, sourceLabel) {
+  initialResources = normalizeImportedResources(imported);
+  updateInitialResourceInputs();
+  plan = normalizeImportedPlan(imported);
+  ensurePlanCoversTimelineTail();
+  const removed = sanitizeCurrentPlan();
+  showToast(removed ? `已导入 ${sourceLabel}，并移除了 ${removed} 个缺少预备/资源的非法技能。` : `已导入 ${sourceLabel}。`);
+  renderTimeline();
+}
+
+async function shareTimeline() {
+  const encoded = encodeTimelineForUrl(serializePlan());
+  const url = new URL(window.location.href);
+  url.hash = `plan=${encoded}`;
+  const shareUrl = url.toString();
+
+  try {
+    await navigator.clipboard.writeText(shareUrl);
+    showToast('已复制分享链接，别人打开该链接即可导入当前时间轴。');
+  } catch {
+    prompt('复制下面的分享链接：', shareUrl);
+    showToast('已生成分享链接。');
+  }
+}
+
+function loadTimelineFromHash() {
+  const hash = window.location.hash.replace(/^#/, '');
+  if (!hash.startsWith('plan=')) return;
+
+  try {
+    loadTimelineData(decodeTimelineFromUrl(hash.slice(5)), '分享链接');
+  } catch (error) {
+    showToast(`分享链接导入失败：${error.message}`);
+  }
+}
+
 function exportTimeline() {
   const json = JSON.stringify(serializePlan(), null, 2);
   const blob = new Blob([json], { type: 'application/json' });
@@ -1309,14 +1359,7 @@ function importTimeline(file) {
   const reader = new FileReader();
   reader.addEventListener('load', () => {
     try {
-      const imported = JSON.parse(reader.result);
-      initialResources = normalizeImportedResources(imported);
-      updateInitialResourceInputs();
-      plan = normalizeImportedPlan(imported);
-      ensurePlanCoversTimelineTail();
-      const removed = sanitizeCurrentPlan();
-      showToast(removed ? `已导入 ${file.name}，并移除了 ${removed} 个缺少预备/资源的非法技能。` : `已导入 ${file.name}。`);
-      renderTimeline();
+      loadTimelineData(JSON.parse(reader.result), file.name);
     } catch (error) {
       showToast(`导入失败：${error.message}`);
     } finally {
@@ -1327,6 +1370,8 @@ function importTimeline(file) {
 }
 
 elements.exportPlan.addEventListener('click', exportTimeline);
+elements.sharePlan.addEventListener('click', shareTimeline);
+window.addEventListener('hashchange', loadTimelineFromHash);
 elements.importPlan.addEventListener('change', event => {
   const [file] = event.target.files;
   if (file) importTimeline(file);
@@ -1358,3 +1403,4 @@ enableTimelineGridClicks();
 updateInitialResourceInputs();
 renderPalette();
 renderTimeline();
+loadTimelineFromHash();
