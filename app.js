@@ -5,12 +5,12 @@ const SLOT_COUNT = Math.ceil((MAX_TIME_SECONDS - START_TIME_SECONDS) / DEFAULT_G
 const ICON_BASE = 'https://ffxiv.gamerescape.com/wiki/Special:Redirect/file/';
 const MAJOR_COOLDOWN_IDS = ['drill', 'air-anchor', 'chain-saw', 'barrel-stabilizer', 'wildfire'];
 const BUFF_DEFINITIONS = {
-  potion: { label: '爆发药', short: '药' },
-  'barrel-prep': { label: '超荷预备', short: '超' },
-  reassemble: { label: '整备', short: '整' },
-  overheat: { label: '过热', short: '热' },
-  'excavator-prep': { label: '掘地飞轮预备', short: '掘' },
-  'full-metal-prep': { label: '全金属爆发预备', short: '金' }
+  potion: { label: '爆发药', short: '药', actionId: 'dexterity-potion' },
+  'barrel-prep': { label: '超荷预备', short: '超', actionId: 'barrel-stabilizer' },
+  reassemble: { label: '整备', short: '整', actionId: 'reassemble' },
+  overheat: { label: '过热', short: '热', actionId: 'hypercharge' },
+  'excavator-prep': { label: '掘地飞轮预备', short: '掘', actionId: 'excavator' },
+  'full-metal-prep': { label: '全金属爆发预备', short: '金', actionId: 'full-metal-field' }
 };
 
 const actions = [
@@ -676,7 +676,7 @@ function renderTimeline() {
     element.innerHTML = `
       <div class="time-label">${formatTime(timeOf(columnIndex, times))}</div>
       ${renderMajorCooldownCell(majorCooldownBuckets[columnIndex])}
-      ${renderBuffCell(derivedState[columnIndex].activeBuffs, timeOf(columnIndex, times))}
+      ${renderBuffCell(derivedState[columnIndex].activeBuffs)}
       <div class="charge-row reassemble-row" title="整备层数 ${derivedState[columnIndex].reassembleCharges} / 2"><i style="width:${(derivedState[columnIndex].reassembleCharges / 2) * 100}%"></i></div>
       <div class="charge-row double-row" title="双将层数 ${derivedState[columnIndex].doubleCheckCharges} / 3"><i style="width:${(derivedState[columnIndex].doubleCheckCharges / 3) * 100}%"></i></div>
       <div class="charge-row check-row" title="将死层数 ${derivedState[columnIndex].checkmateCharges} / 3"><i style="width:${(derivedState[columnIndex].checkmateCharges / 3) * 100}%"></i></div>
@@ -696,10 +696,11 @@ function renderTimeline() {
   elements.grid.append(fragment);
 }
 
-function renderBuffCell(activeBuffs, columnTime) {
+function renderBuffCell(activeBuffs) {
   const content = activeBuffs.map(buff => {
-    const remaining = Math.max(0, buff.expiresAt - columnTime);
-    return `<span class="buff-badge buff-${buff.id}" title="${buff.label} 剩余 ${formatTime(remaining)}"><b>${buff.id === 'overheat' && buff.stacks ? `${buff.short}${buff.stacks}` : buff.short}</b><small>${formatTime(remaining)}</small></span>`;
+    const action = actionsById[buff.actionId];
+    const icon = action?.icon || '';
+    return `<span class="buff-badge buff-${buff.id}" title="${buff.label}"><img src="${icon}" alt="${buff.label}"></span>`;
   }).join('');
   return `<div class="buff-row" title="Buff：爆发药 / 超荷预备 / 整备 / 过热 / 掘地飞轮预备 / 全金属爆发预备">${content}</div>`;
 }
