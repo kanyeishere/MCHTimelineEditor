@@ -4,6 +4,26 @@ const ICON_BASE = 'https://ffxiv.gamerescape.com/wiki/Special:Redirect/file/';
 const APP_SOURCE_PATH = 'app.js';
 const OUTPUT_DIR = 'assets/icons';
 const FORCE_DOWNLOAD = process.argv.includes('--force');
+const COOKIE_ARG_INDEX = process.argv.indexOf('--cookie');
+const COOKIE_HEADER = COOKIE_ARG_INDEX >= 0 ? process.argv[COOKIE_ARG_INDEX + 1] : process.env.GAMERESCAPE_COOKIE;
+
+if (COOKIE_ARG_INDEX >= 0 && !COOKIE_HEADER) {
+  throw new Error('Usage: npm run download:icons -- --cookie "name=value; other=value"');
+}
+const BROWSER_HEADERS = {
+  accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+  'accept-language': 'en-US,en;q=0.9',
+  'cache-control': 'no-cache',
+  pragma: 'no-cache',
+  priority: 'i',
+  'sec-ch-ua': '"Chromium";v="125", "Not.A/Brand";v="24"',
+  'sec-ch-ua-mobile': '?0',
+  'sec-ch-ua-platform': '"Windows"',
+  'sec-fetch-dest': 'image',
+  'sec-fetch-mode': 'no-cors',
+  'sec-fetch-site': 'same-origin',
+  'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
+};
 
 const appSource = await readFile(APP_SOURCE_PATH, 'utf8');
 const actionsSource = appSource.match(/const actions = \[([\s\S]*?)\]\s*\.map/)?.[1];
@@ -52,12 +72,15 @@ for (const action of actions) {
   const response = await fetch(url, {
     redirect: 'follow',
     headers: {
-      'user-agent': 'Mozilla/5.0 (compatible; MCHTimelineEditor icon downloader)'
+      ...BROWSER_HEADERS,
+      referer: `https://ffxiv.gamerescape.com/wiki/${encodeURIComponent(action.en.replaceAll(' ', '_'))}`,
+      ...(COOKIE_HEADER ? { cookie: COOKIE_HEADER } : {})
     }
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to download ${action.id} from ${url}: HTTP ${response.status}`);
+    const cookieHint = COOKIE_HEADER ? '' : ' If this URL opens in your browser but not in Node, copy your ffxiv.gamerescape.com browser Cookie header and rerun with --cookie "..." or GAMERESCAPE_COOKIE="...".';
+    throw new Error(`Failed to download ${action.id} from ${url}: HTTP ${response.status}.${cookieHint}`);
   }
 
   const contentType = response.headers.get('content-type') ?? '';
