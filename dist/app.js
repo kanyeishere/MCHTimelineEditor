@@ -5,6 +5,7 @@ const SLOT_COUNT = Math.ceil((MAX_TIME_SECONDS - START_TIME_SECONDS) / DEFAULT_G
 const ICON_BASE = 'https://ffxiv.gamerescape.com/wiki/Special:Redirect/file/';
 
 const actions = [
+  { id: 'dexterity-potion', cn: '爆发药水', en: 'Grade 3 Gemdraught of Dexterity', level: 1, type: 'ogcd', category: '药品', recast: 270, buffDuration: 30, range: '0米', radius: '0米', desc: '视为能力技。使用后获得30秒爆发药效果，时间轴中处于药效窗口内的本体与机器人技能都会高亮。' },
   { id: 'split-shot', cn: '分裂弹', en: 'Split Shot', level: 1, type: 'gcd', category: '职业技能', recast: 2.5, range: '25米', radius: '0米', potency: 140, heat: 5, desc: '对目标发动远距离物理攻击。追加效果：热量 +5。' },
   { id: 'slug-shot', cn: '独头弹', en: 'Slug Shot', level: 2, type: 'gcd', category: '职业技能', recast: 2.5, range: '25米', radius: '0米', potency: 100, heat: 5, desc: '连击：分裂弹/热分裂弹。连击成功时威力提高并增加热量。' },
   { id: 'hot-shot', cn: '热弹', en: 'Hot Shot', level: 4, type: 'gcd', category: '职业技能', recast: 40, range: '25米', radius: '0米', potency: 240, battery: 20, desc: '不与其他战技共享复唱。追加效果：电量 +20。' },
@@ -48,7 +49,8 @@ const actions = [
   { id: 'arms-length', cn: '亲疏自行', en: "Arm's Length", level: 32, type: 'ogcd', category: '职能技能', recast: 120, range: '0米', radius: '0米', desc: '令自身免疫大多数击退与吸引效果。' }
 ].map(action => ({
   ...action,
-  icon: `${ICON_BASE}${encodeURIComponent(action.en.replaceAll(' ', '_') + '_Icon.png')}`
+  icon: `${ICON_BASE}${encodeURIComponent(action.en.replaceAll(' ', '_') + '_Icon.png')}`,
+  gcdDuration: action.type === 'gcd' ? (action.recast === 1.5 ? 1.5 : 2.5) : 0
 }));
 
 const actionsById = Object.fromEntries(actions.map(action => [action.id, action]));
@@ -72,9 +74,9 @@ function createEmptyPlan() {
   return Array.from({ length: SLOT_COUNT }, () => ({ gcd: null, ogcds: [null, null, null] }));
 }
 
-function getColumnRecast(column) {
+function getColumnGcdDuration(column) {
   const action = actionsById[column.gcd];
-  return action?.recast || DEFAULT_GCD_SECONDS;
+  return action?.gcdDuration || DEFAULT_GCD_SECONDS;
 }
 
 function getTimelineTimes() {
@@ -83,7 +85,7 @@ function getTimelineTimes() {
 
   for (let index = 0; index < plan.length; index += 1) {
     times[index] = current;
-    current += getColumnRecast(plan[index]);
+    current += getColumnGcdDuration(plan[index]);
   }
 
   return times;
@@ -99,7 +101,24 @@ function formatTime(seconds) {
 
 function maxOgcdSlotsFor(column) {
   const action = actionsById[column.gcd];
-  return action?.recast === 1.5 ? 2 : 3;
+  return action?.gcdDuration === 1.5 ? 2 : 3;
+}
+
+function getBuffWindows(times = getTimelineTimes()) {
+  const windows = [];
+  plan.forEach((column, columnIndex) => {
+    column.ogcds.forEach((actionId, ogcdIndex) => {
+      const action = actionsById[actionId];
+      if (!action?.buffDuration) return;
+      const start = timeOf(columnIndex, times) + ((ogcdIndex + 1) * 0.6);
+      windows.push({ start, end: start + action.buffDuration });
+    });
+  });
+  return windows;
+}
+
+function isInBuffWindow(releaseTime, buffWindows) {
+  return buffWindows.some(window => releaseTime >= window.start && releaseTime <= window.end);
 }
 
 function deriveState(times = getTimelineTimes()) {
@@ -176,7 +195,7 @@ function getAvailability(action, slotIndex, times = getTimelineTimes()) {
 }
 
 function renderPalette() {
-  const categories = ['职业技能', '职能技能'];
+  const categories = ['职业技能', '职能技能', '药品'];
   elements.palette.innerHTML = categories.map(category => `
     <section class="skill-category">
       <h2>${category}</h2>
@@ -211,7 +230,8 @@ function renderTooltip(action) {
     action.heat ? `${action.heat > 0 ? '热量 +' : '热量 '}${action.heat}` : '',
     action.drainBattery ? '消耗：全部电量（最低50）' : '',
     action.battery ? `${action.battery > 0 ? '电量 +' : '电量 '}${action.battery}` : '',
-    action.charges ? `最大档数：${action.charges}` : ''
+    action.charges ? `最大档数：${action.charges}` : '',
+    action.buffDuration ? `Buff时间：${action.buffDuration}秒` : ''
   ].filter(Boolean).join('　');
 
   return `
@@ -234,6 +254,7 @@ function renderTooltip(action) {
 
 function renderTimeline() {
   const times = getTimelineTimes();
+  const buffWindows = getBuffWindows(times);
   deriveState(times);
   const lastState = derivedState.at(-1) || { heat: 0, battery: 0, doubleCheckCharges: 3, checkmateCharges: 3 };
   elements.heatNow.textContent = lastState.heat;
@@ -254,16 +275,16 @@ function renderTimeline() {
         <i class="battery-bar" style="height:${derivedState[columnIndex].battery}%"></i>
       </div>
     `;
-    element.append(createSlot(columnIndex, 'gcd', null, column.gcd, false, timeOf(columnIndex, times)));
+    element.append(createSlot(columnIndex, 'gcd', null, column.gcd, false, timeOf(columnIndex, times), buffWindows));
     [0, 1, 2].forEach(slotIndex => {
-      element.append(createSlot(columnIndex, 'ogcd', slotIndex, column.ogcds[slotIndex], slotIndex >= maxOgcdSlotsFor(column), timeOf(columnIndex, times) + ((slotIndex + 1) * 0.6)));
+      element.append(createSlot(columnIndex, 'ogcd', slotIndex, column.ogcds[slotIndex], slotIndex >= maxOgcdSlotsFor(column), timeOf(columnIndex, times) + ((slotIndex + 1) * 0.6), buffWindows));
     });
-    element.append(createRobotSlot(columnIndex, times));
+    element.append(createRobotSlot(columnIndex, times, buffWindows));
     elements.grid.append(element);
   });
 }
 
-function createSlot(columnIndex, kind, ogcdIndex, actionId, disabled = false, releaseTime = timeOf(columnIndex)) {
+function createSlot(columnIndex, kind, ogcdIndex, actionId, disabled = false, releaseTime = timeOf(columnIndex), buffWindows = []) {
   const slot = document.createElement('div');
   slot.className = `timeline-slot ${kind === 'gcd' ? 'gcd-slot' : 'ogcd-slot'} ${disabled ? 'disabled-slot' : ''}`;
   if (!disabled) {
@@ -273,7 +294,7 @@ function createSlot(columnIndex, kind, ogcdIndex, actionId, disabled = false, re
 
   if (actionId) {
     const action = actionsById[actionId];
-    slot.innerHTML = `<span class="placed-action"><small>${formatTime(releaseTime)}</small><img class="placed-icon ${action.recast === 1.5 ? 'short-gcd' : ''}" src="${action.icon}" alt="${action.cn}" title="点击移除 ${action.cn}"></span>`;
+    slot.innerHTML = `<span class="placed-action ${isInBuffWindow(releaseTime, buffWindows) ? 'buffed-action' : ''}"><small>${formatTime(releaseTime)}</small><img class="placed-icon ${action.gcdDuration === 1.5 ? 'short-gcd' : ''}" src="${action.icon}" alt="${action.cn}" title="点击移除 ${action.cn}"></span>`;
     slot.addEventListener('click', () => {
       if (kind === 'gcd') plan[columnIndex].gcd = null;
       else plan[columnIndex].ogcds[ogcdIndex] = null;
@@ -296,7 +317,7 @@ function getRobotEvents(times = getTimelineTimes()) {
   return events;
 }
 
-function createRobotSlot(columnIndex, times) {
+function createRobotSlot(columnIndex, times, buffWindows) {
   const slot = document.createElement('div');
   slot.className = 'timeline-slot robot-slot';
   const start = timeOf(columnIndex, times);
@@ -304,7 +325,7 @@ function createRobotSlot(columnIndex, times) {
   const events = getRobotEvents(times).filter(event => event.time >= start && event.time < end);
   slot.innerHTML = events.map(event => {
     const action = actionsById[event.actionId];
-    return `<span class="placed-action robot-action"><small>${formatTime(event.time)}</small><img class="placed-icon" src="${action.icon}" alt="${action.cn}" title="${action.cn} ${formatTime(event.time)}"></span>`;
+    return `<span class="placed-action robot-action ${isInBuffWindow(event.time, buffWindows) ? 'buffed-action' : ''}"><small>${formatTime(event.time)}</small><img class="placed-icon" src="${action.icon}" alt="${action.cn}" title="${action.cn} ${formatTime(event.time)}"></span>`;
   }).join('');
   return slot;
 }
@@ -352,7 +373,7 @@ function handleDrop(event, columnIndex, kind, ogcdIndex) {
 
   if (kind === 'gcd') {
     plan[columnIndex].gcd = action.id;
-    if (action.recast === 1.5) plan[columnIndex].ogcds[2] = null;
+    if (action.gcdDuration === 1.5) plan[columnIndex].ogcds[2] = null;
   } else {
     plan[columnIndex].ogcds[ogcdIndex] = action.id;
   }

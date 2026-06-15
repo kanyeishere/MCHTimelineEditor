@@ -126,6 +126,8 @@ p { margin: 0; }
 .robot-slot { background: #fff8e8; }
 .robot-slot:empty::after { content: ""; }
 .robot-action .placed-icon { border-color: #c3912e; }
+.buffed-action { padding: 2px; border-radius: 8px; background: linear-gradient(180deg, rgba(255,235,121,.75), rgba(255,126,36,.35)); box-shadow: 0 0 0 2px #f7d85d, 0 0 12px #ffcf33; }
+.buffed-action small { color: #4d2a00; font-weight: 800; }
 .gcd-slot .placed-icon { width: 46px; height: 46px; }
 .placed-icon.short-gcd { width: 32px; border-radius: 14px; }
 footer { margin: 0 36px 30px; color: #c7bea5; font-size: 13px; }
