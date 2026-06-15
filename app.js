@@ -5,21 +5,21 @@ const SLOT_COUNT = Math.ceil((MAX_TIME_SECONDS - START_TIME_SECONDS) / DEFAULT_G
 const ICON_BASE = 'https://ffxiv.gamerescape.com/wiki/Special:Redirect/file/';
 
 const actions = [
-  { id: 'dexterity-potion', cn: '爆发药水', en: 'Grade 3 Gemdraught of Dexterity', level: 1, type: 'ogcd', category: '药品', recast: 270, buffDuration: 30, range: '0米', radius: '0米', desc: '视为能力技。使用后获得30秒爆发药效果，时间轴中处于药效窗口内的本体与机器人技能都会高亮。' },
-  { id: 'split-shot', cn: '分裂弹', en: 'Split Shot', level: 1, type: 'gcd', category: '职业技能', recast: 2.5, range: '25米', radius: '0米', potency: 140, heat: 5, desc: '对目标发动远距离物理攻击。追加效果：热量 +5。' },
-  { id: 'slug-shot', cn: '独头弹', en: 'Slug Shot', level: 2, type: 'gcd', category: '职业技能', recast: 2.5, range: '25米', radius: '0米', potency: 100, heat: 5, desc: '连击：分裂弹/热分裂弹。连击成功时威力提高并增加热量。' },
-  { id: 'hot-shot', cn: '热弹', en: 'Hot Shot', level: 4, type: 'gcd', category: '职业技能', recast: 40, range: '25米', radius: '0米', potency: 240, battery: 20, desc: '不与其他战技共享复唱。追加效果：电量 +20。' },
+  { id: 'dexterity-potion', cn: '爆发药水', en: 'Grade 3 Gemdraught of Dexterity', level: 1, type: 'ogcd', category: '职业技能', recast: 270, buffDuration: 30, range: '0米', radius: '0米', desc: '视为能力技。使用后获得30秒爆发药效果，时间轴中处于药效窗口内的本体与机器人技能都会高亮。' },
+  { id: 'split-shot', hidden: true, cn: '分裂弹', en: 'Split Shot', level: 1, type: 'gcd', category: '职业技能', recast: 2.5, range: '25米', radius: '0米', potency: 140, heat: 5, desc: '对目标发动远距离物理攻击。追加效果：热量 +5。' },
+  { id: 'slug-shot', hidden: true, cn: '独头弹', en: 'Slug Shot', level: 2, type: 'gcd', category: '职业技能', recast: 2.5, range: '25米', radius: '0米', potency: 100, heat: 5, desc: '连击：分裂弹/热分裂弹。连击成功时威力提高并增加热量。' },
+  { id: 'hot-shot', hidden: true, cn: '热弹', en: 'Hot Shot', level: 4, type: 'gcd', category: '职业技能', recast: 40, range: '25米', radius: '0米', potency: 240, battery: 20, desc: '不与其他战技共享复唱。追加效果：电量 +20。' },
   { id: 'reassemble', cn: '整备', en: 'Reassemble', level: 10, type: 'ogcd', category: '职业技能', recast: 55, charges: 2, range: '0米', radius: '0米', desc: '令下一个战技必定暴击并直击。最大档数：2。' },
-  { id: 'gauss-round', cn: '虹吸弹', en: 'Gauss Round', level: 15, type: 'ogcd', category: '职业技能', recast: 30, charges: 3, range: '25米', radius: '0米', potency: 130, desc: '对目标发动远距离物理攻击。最大档数：3。' },
-  { id: 'spread-shot', cn: '散射', en: 'Spread Shot', level: 18, type: 'gcd', category: '职业技能', recast: 2.5, range: '12米', radius: '12米', potency: 110, heat: 5, desc: '向目标方向发动扇形范围攻击。追加效果：热量 +5。' },
-  { id: 'clean-shot', cn: '狙击弹', en: 'Clean Shot', level: 26, type: 'gcd', category: '职业技能', recast: 2.5, range: '25米', radius: '0米', potency: 100, heat: 5, battery: 10, desc: '连击：独头弹/热独头弹。连击成功时热量 +5、电量 +10。' },
+  { id: 'gauss-round', hidden: true, cn: '虹吸弹', en: 'Gauss Round', level: 15, type: 'ogcd', category: '职业技能', recast: 30, charges: 3, range: '25米', radius: '0米', potency: 130, desc: '对目标发动远距离物理攻击。最大档数：3。' },
+  { id: 'spread-shot', hidden: true, cn: '散射', en: 'Spread Shot', level: 18, type: 'gcd', category: '职业技能', recast: 2.5, range: '12米', radius: '12米', potency: 110, heat: 5, desc: '向目标方向发动扇形范围攻击。追加效果：热量 +5。' },
+  { id: 'clean-shot', hidden: true, cn: '狙击弹', en: 'Clean Shot', level: 26, type: 'gcd', category: '职业技能', recast: 2.5, range: '25米', radius: '0米', potency: 100, heat: 5, battery: 10, desc: '连击：独头弹/热独头弹。连击成功时热量 +5、电量 +10。' },
   { id: 'hypercharge', cn: '超荷', en: 'Hypercharge', level: 30, type: 'ogcd', category: '职业技能', recast: 10, heat: -50, range: '0米', radius: '0米', desc: '消耗50热量，获得5档过热，可执行烈焰弹/自动弩。' },
-  { id: 'heat-blast', cn: '热冲击', en: 'Heat Blast', level: 35, type: 'gcd', category: '职业技能', recast: 1.5, range: '25米', radius: '0米', potency: 200, desc: '过热时可用；追加效果：虹吸弹和弹射的复唱时间缩短15秒。' },
-  { id: 'rook-autoturret', cn: '车式浮空炮塔', en: 'Rook Autoturret', level: 40, type: 'ogcd', category: '职业技能', recast: 6, battery: -50, range: '0米', radius: '0米', desc: '消耗50电量部署单体炮塔；与后式自走人偶共享用途。' },
-  { id: 'rook-overdrive', cn: '超档车式炮塔', en: 'Rook Overdrive', level: 40, type: 'ogcd', category: '职业技能', recast: 15, range: '25米', radius: '0米', desc: '命令车式浮空炮塔执行超负荷。' },
+  { id: 'heat-blast', hidden: true, cn: '热冲击', en: 'Heat Blast', level: 35, type: 'gcd', category: '职业技能', recast: 1.5, range: '25米', radius: '0米', potency: 200, desc: '过热时可用；追加效果：虹吸弹和弹射的复唱时间缩短15秒。' },
+  { id: 'rook-autoturret', hidden: true, cn: '车式浮空炮塔', en: 'Rook Autoturret', level: 40, type: 'ogcd', category: '职业技能', recast: 6, battery: -50, range: '0米', radius: '0米', desc: '消耗50电量部署单体炮塔；与后式自走人偶共享用途。' },
+  { id: 'rook-overdrive', hidden: true, cn: '超档车式炮塔', en: 'Rook Overdrive', level: 40, type: 'ogcd', category: '职业技能', recast: 15, range: '25米', radius: '0米', desc: '命令车式浮空炮塔执行超负荷。' },
   { id: 'wildfire', cn: '野火', en: 'Wildfire', level: 45, type: 'ogcd', category: '职业技能', recast: 120, range: '25米', radius: '0米', desc: '附加野火；持续结束或起爆时根据期间命中的战技次数造成伤害。' },
   { id: 'detonator', cn: '起爆', en: 'Detonator', level: 45, type: 'ogcd', category: '职业技能', recast: 1, range: '25米', radius: '0米', desc: '提前结束野火并造成伤害。' },
-  { id: 'ricochet', cn: '弹射', en: 'Ricochet', level: 50, type: 'ogcd', category: '职业技能', recast: 30, charges: 3, range: '25米', radius: '5米', potency: 130, desc: '对目标及周围敌人发动范围攻击。最大档数：3。' },
+  { id: 'ricochet', hidden: true, cn: '弹射', en: 'Ricochet', level: 50, type: 'ogcd', category: '职业技能', recast: 30, charges: 3, range: '25米', radius: '5米', potency: 130, desc: '对目标及周围敌人发动范围攻击。最大档数：3。' },
   { id: 'auto-crossbow', cn: '自动弩', en: 'Auto Crossbow', level: 52, type: 'gcd', category: '职业技能', recast: 1.5, range: '12米', radius: '12米', potency: 140, desc: '过热时可用的扇形范围战技。' },
   { id: 'heated-split-shot', cn: '热分裂弹', en: 'Heated Split Shot', level: 54, type: 'gcd', category: '职业技能', recast: 2.5, range: '25米', radius: '0米', potency: 220, heat: 5, desc: '分裂弹的强化版。追加效果：热量 +5。' },
   { id: 'tactician', cn: '策动', en: 'Tactician', level: 56, type: 'ogcd', category: '职业技能', recast: 90, range: '0米', radius: '30米', desc: '降低自身与周围队员受到的伤害。' },
@@ -41,12 +41,12 @@ const actions = [
   { id: 'checkmate', cn: '将死', en: 'Checkmate', level: 92, type: 'ogcd', category: '职业技能', recast: 1, charges: 3, range: '25米', radius: '5米', potency: 160, desc: '弹射的强化版。最大档数：3。' },
   { id: 'excavator', cn: '掘地飞轮', en: 'Excavator', level: 96, type: 'gcd', category: '职业技能', recast: 2.5, range: '25米', radius: '25米直线', potency: 620, battery: 20, desc: '回转飞锯后获得预备效果时可用，追加电量。' },
   { id: 'full-metal-field', cn: '全金属爆发', en: 'Full Metal Field', level: 100, type: 'gcd', category: '职业技能', recast: 2.5, range: '25米', radius: '5米', potency: 900, desc: '强力范围战技；通常由枪管加热相关效果触发。' },
-  { id: 'second-wind', cn: '内丹', en: 'Second Wind', level: 8, type: 'ogcd', category: '职能技能', recast: 120, range: '0米', radius: '0米', desc: '恢复自身HP。' },
-  { id: 'leg-graze', cn: '伤腿', en: 'Leg Graze', level: 6, type: 'ogcd', category: '职能技能', recast: 30, range: '25米', radius: '0米', desc: '对目标附加加重。' },
-  { id: 'foot-graze', cn: '伤足', en: 'Foot Graze', level: 10, type: 'ogcd', category: '职能技能', recast: 30, range: '25米', radius: '0米', desc: '对目标附加止步。' },
-  { id: 'head-graze', cn: '伤头', en: 'Head Graze', level: 24, type: 'ogcd', category: '职能技能', recast: 30, range: '25米', radius: '0米', desc: '打断目标咏唱。' },
-  { id: 'peloton', cn: '速行', en: 'Peloton', level: 20, type: 'ogcd', category: '职能技能', recast: 5, range: '0米', radius: '30米', desc: '非战斗状态下提高自身与周围队员移动速度。' },
-  { id: 'arms-length', cn: '亲疏自行', en: "Arm's Length", level: 32, type: 'ogcd', category: '职能技能', recast: 120, range: '0米', radius: '0米', desc: '令自身免疫大多数击退与吸引效果。' }
+  { id: 'second-wind', hidden: true, cn: '内丹', en: 'Second Wind', level: 8, type: 'ogcd', category: '职能技能', recast: 120, range: '0米', radius: '0米', desc: '恢复自身HP。' },
+  { id: 'leg-graze', hidden: true, cn: '伤腿', en: 'Leg Graze', level: 6, type: 'ogcd', category: '职能技能', recast: 30, range: '25米', radius: '0米', desc: '对目标附加加重。' },
+  { id: 'foot-graze', hidden: true, cn: '伤足', en: 'Foot Graze', level: 10, type: 'ogcd', category: '职能技能', recast: 30, range: '25米', radius: '0米', desc: '对目标附加止步。' },
+  { id: 'head-graze', hidden: true, cn: '伤头', en: 'Head Graze', level: 24, type: 'ogcd', category: '职能技能', recast: 30, range: '25米', radius: '0米', desc: '打断目标咏唱。' },
+  { id: 'peloton', hidden: true, cn: '速行', en: 'Peloton', level: 20, type: 'ogcd', category: '职能技能', recast: 5, range: '0米', radius: '30米', desc: '非战斗状态下提高自身与周围队员移动速度。' },
+  { id: 'arms-length', hidden: true, cn: '亲疏自行', en: "Arm's Length", level: 32, type: 'ogcd', category: '职能技能', recast: 120, range: '0米', radius: '0米', desc: '令自身免疫大多数击退与吸引效果。' }
 ].map(action => ({
   ...action,
   icon: `${ICON_BASE}${encodeURIComponent(action.en.replaceAll(' ', '_') + '_Icon.png')}`,
@@ -67,7 +67,9 @@ const elements = {
   batteryMeter: document.getElementById('batteryMeter'),
   doubleNow: document.getElementById('doubleNow'),
   checkNow: document.getElementById('checkNow'),
-  reset: document.getElementById('reset')
+  reset: document.getElementById('reset'),
+  exportPlan: document.getElementById('exportPlan'),
+  importPlan: document.getElementById('importPlan')
 };
 
 function createEmptyPlan() {
@@ -221,15 +223,20 @@ function getAvailability(action, slotIndex, times = getTimelineTimes()) {
 }
 
 function renderPalette() {
-  const categories = ['职业技能', '职能技能', '药品'];
-  elements.palette.innerHTML = categories.map(category => `
-    <section class="skill-category">
-      <h2>${category}</h2>
-      <div class="skill-list">
-        ${actions.filter(action => action.category === category).map(renderPaletteAction).join('')}
-      </div>
-    </section>
-  `).join('');
+  const categories = ['职业技能'];
+  elements.palette.innerHTML = categories.map(category => {
+    const visibleActions = actions
+      .filter(action => action.category === category && !action.hidden)
+      .sort((a, b) => (a.id === 'dexterity-potion') - (b.id === 'dexterity-potion'));
+    return `
+      <section class="skill-category">
+        <h2>${category}</h2>
+        <div class="skill-list">
+          ${visibleActions.map(renderPaletteAction).join('')}
+        </div>
+      </section>
+    `;
+  }).join('');
 
   document.querySelectorAll('.skill-card').forEach(card => {
     card.addEventListener('dragstart', event => {
@@ -416,6 +423,67 @@ function handleDrop(event, columnIndex, kind, ogcdIndex) {
 function showToast(message) {
   elements.toast.textContent = message;
 }
+
+
+function serializePlan() {
+  return {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    plan
+  };
+}
+
+function normalizeImportedPlan(imported) {
+  const rawPlan = Array.isArray(imported) ? imported : imported?.plan;
+  if (!Array.isArray(rawPlan)) throw new Error('导入文件中没有可识别的 plan 数组。');
+
+  const normalized = createEmptyPlan();
+  rawPlan.slice(0, SLOT_COUNT).forEach((column, index) => {
+    const gcd = actionsById[column?.gcd] ? column.gcd : null;
+    const ogcds = Array.isArray(column?.ogcds)
+      ? column.ogcds.slice(0, 3).map(actionId => (actionsById[actionId] ? actionId : null))
+      : [null, null, null];
+    while (ogcds.length < 3) ogcds.push(null);
+    normalized[index] = { gcd, ogcds };
+  });
+  return normalized;
+}
+
+function exportTimeline() {
+  const json = JSON.stringify(serializePlan(), null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `mch-timeline-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  showToast('已导出当前时间轴 JSON。');
+}
+
+function importTimeline(file) {
+  const reader = new FileReader();
+  reader.addEventListener('load', () => {
+    try {
+      plan = normalizeImportedPlan(JSON.parse(reader.result));
+      showToast(`已导入 ${file.name}。`);
+      renderTimeline();
+    } catch (error) {
+      showToast(`导入失败：${error.message}`);
+    } finally {
+      elements.importPlan.value = '';
+    }
+  });
+  reader.readAsText(file);
+}
+
+elements.exportPlan.addEventListener('click', exportTimeline);
+elements.importPlan.addEventListener('change', event => {
+  const [file] = event.target.files;
+  if (file) importTimeline(file);
+});
 
 elements.reset.addEventListener('click', () => {
   plan = createEmptyPlan();
