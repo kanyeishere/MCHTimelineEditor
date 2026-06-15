@@ -378,16 +378,30 @@ function getMajorCooldownEventsFromFacts(facts) {
   MAJOR_COOLDOWN_IDS.forEach(actionId => {
     const action = actionsById[actionId];
     if (!action) return;
+    if (action.charges) return;
     events.push({ actionId, time: START_TIME_SECONDS, kind: 'initial' });
-    const readyTimes = action.charges
-      ? getChargeRecoveryEventsFromFacts(actionId, facts)
-      : (facts.useTimesByAction.get(actionId) || []).map(useTime => useTime + (action.recast || DEFAULT_GCD_SECONDS));
+    const readyTimes = (facts.useTimesByAction.get(actionId) || []).map(useTime => useTime + (action.recast || DEFAULT_GCD_SECONDS));
     readyTimes.forEach(time => events.push({ actionId, time, kind: 'ready' }));
   });
 
   return events
     .filter(event => event.time >= START_TIME_SECONDS && event.time <= getSimulationEndTime())
     .sort((a, b) => a.time - b.time || MAJOR_COOLDOWN_IDS.indexOf(a.actionId) - MAJOR_COOLDOWN_IDS.indexOf(b.actionId));
+}
+
+function addMajorChargeStatusToBuckets(buckets, facts, times) {
+  MAJOR_COOLDOWN_IDS.forEach(actionId => {
+    const action = actionsById[actionId];
+    if (!action?.charges) return;
+
+    buckets.forEach((bucket, columnIndex) => {
+      const columnTime = timeOf(columnIndex, times);
+      const charges = getAvailableChargesAtWithFacts(actionId, columnTime, facts);
+      for (let chargeIndex = 0; chargeIndex < charges; chargeIndex += 1) {
+        bucket.push({ actionId, time: columnTime, kind: 'charge', chargeIndex, charges });
+      }
+    });
+  });
 }
 
 function bucketEventsByColumn(events, times) {
@@ -679,28 +693,16 @@ function getAvailability(action, slotIndex, times = getTimelineTimes(), options 
     const facts = collectTimelineFacts(times);
     const existingUseTimes = useEvents.map(use => use.time);
     const beforeCandidate = simulateChargeState(action.id, now, existingUseTimes, facts);
-    if (beforeCandidate.charges <= 0) {
-      const remaining = beforeCandidate.nextRecoveryTime === null ? action.recast : Math.max(0, beforeCandidate.nextRecoveryTime - now);
-      return { ok: false, message: `充能中，约 ${Math.ceil(remaining)} 秒后可用` };
-    }
+    const candidateUseTimes = [...existingUseTimes, now].sort((a, b) => a - b);
+    const afterCandidate = simulateChargeState(action.id, getSimulationEndTime(), candidateUseTimes, facts);
 
-    let charges = beforeCandidate.charges - 1;
-    let nextRecoveryTime = beforeCandidate.nextRecoveryTime;
-    if (nextRecoveryTime === null) nextRecoveryTime = getChargeRecoveryTime(action.id, now, facts);
-    const recoverUntil = limitTime => {
-      while (nextRecoveryTime !== null && nextRecoveryTime <= limitTime) {
-        charges = Math.min(action.charges, charges + 1);
-        if (charges >= action.charges) nextRecoveryTime = null;
-        else nextRecoveryTime = getChargeRecoveryTime(action.id, nextRecoveryTime, facts);
+    if (afterCandidate.blockedUseTime !== null) {
+      if (Math.abs(afterCandidate.blockedUseTime - now) <= TIME_EPSILON) {
+        const remaining = beforeCandidate.nextRecoveryTime === null ? action.recast : Math.max(0, beforeCandidate.nextRecoveryTime - now);
+        return { ok: false, message: `充能中，约 ${Math.ceil(remaining)} 秒后可用` };
       }
-    };
 
-    const futureUseTimes = existingUseTimes.filter(useTime => useTime > now).sort((a, b) => a - b);
-    for (const futureUseTime of futureUseTimes) {
-      recoverUntil(futureUseTime);
-      if (charges <= 0) return { ok: false, message: `会导致后续 ${formatTime(futureUseTime)} 的${action.cn}充能不足` };
-      charges -= 1;
-      if (nextRecoveryTime === null) nextRecoveryTime = getChargeRecoveryTime(action.id, futureUseTime, facts);
+      return { ok: false, message: `会导致后续 ${formatTime(afterCandidate.blockedUseTime)} 的${action.cn}充能不足` };
     }
 
     return { ok: true };
@@ -804,6 +806,7 @@ function renderTimeline() {
   const robotBuckets = bucketRobotEventsByColumn(getRobotEventsFromFacts(facts), times);
   const robotSummons = getRobotSummons(times);
   const majorCooldownBuckets = bucketEventsByColumn(getMajorCooldownEventsFromFacts(facts), times);
+  addMajorChargeStatusToBuckets(majorCooldownBuckets, facts, times);
   deriveState(times, facts);
   const lastState = derivedState.at(-1) || { heat: 0, battery: 0, activeBuffs: [], reassembleCharges: 2, doubleCheckCharges: 3, checkmateCharges: 3 };
   if (elements.heatNow) {
@@ -906,8 +909,11 @@ function renderMajorCooldownCell(events) {
     const action = actionsById[event.actionId];
     const title = event.kind === 'initial'
       ? `${action.cn} 开场可用`
-      : `${action.cn} 在 ${formatTime(event.time)} 转好`;
-    return `<span class="major-cd-badge ${event.kind}" data-action-id="${event.actionId}" title="${title}"><img src="${action.icon}" alt="${action.cn}"><small>${formatTime(event.time)}</small></span>`;
+      : event.kind === 'charge'
+        ? `${action.cn} 当前 ${event.charges} / ${action.charges} 层，可用`
+        : `${action.cn} 在 ${formatTime(event.time)} 转好`;
+    const label = event.kind === 'charge' ? `${event.chargeIndex + 1}/${action.charges}` : formatTime(event.time);
+    return `<span class="major-cd-badge ${event.kind}" data-action-id="${event.actionId}" title="${title}"><img src="${action.icon}" alt="${action.cn}"><small>${label}</small></span>`;
   }).join('');
   return `<div class="major-cd-row" title="大技能CD提醒：钻头 / 空气锚 / 回转飞锯 / 枪管加热 / 野火 / 爆发药水">${content}</div>`;
 }
