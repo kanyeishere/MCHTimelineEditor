@@ -82,7 +82,8 @@ const elements = {
   exportPlan: document.getElementById('exportPlan'),
   importPlan: document.getElementById('importPlan'),
   addBasicCombo: document.getElementById('addBasicCombo'),
-  addOverheatCombo: document.getElementById('addOverheatCombo')
+  addOverheatCombo: document.getElementById('addOverheatCombo'),
+  addTransitionGap: document.getElementById('addTransitionGap')
 };
 
 let timelineColumnWidth = 66;
@@ -116,13 +117,19 @@ function enableHorizontalWheelScroll() {
 }
 
 function createEmptyPlan() {
-  return Array.from({ length: SLOT_COUNT }, () => ({ gcd: null, ogcds: [null, null, null] }));
+  return Array.from({ length: SLOT_COUNT }, () => ({ gcd: null, ogcds: [null, null, null], gapAfter: 0 }));
 }
 
 function getColumnGcdDuration(column) {
   const action = actionsById[column.gcd];
-  return action?.gcdDuration || DEFAULT_GCD_SECONDS;
+  return (action?.gcdDuration || DEFAULT_GCD_SECONDS) + getColumnGapAfter(column);
 }
+
+function getColumnGapAfter(column) {
+  const gap = Number(column?.gapAfter || 0);
+  return Number.isFinite(gap) && gap > 0 ? gap : 0;
+}
+
 
 function getTimelineTimes() {
   const times = [];
@@ -718,9 +725,10 @@ function renderTimeline() {
   const currentColumnIndex = getCurrentColumnIndex();
   plan.forEach((column, columnIndex) => {
     const element = document.createElement('div');
-    element.className = `timeline-column ${columnIndex === currentColumnIndex ? 'current-column' : ''}`;
+    const gapAfter = getColumnGapAfter(column);
+    element.className = `timeline-column ${columnIndex === currentColumnIndex ? 'current-column' : ''} ${gapAfter ? 'phase-gap-after' : ''}`;
     element.innerHTML = `
-      <div class="time-label">${formatTime(timeOf(columnIndex, times))}</div>
+      <div class="time-label">${formatTime(timeOf(columnIndex, times))}${gapAfter ? `<button class="gap-badge" type="button" title="点击修改/清除：当前GCD结束后转场空白 ${formatTime(gapAfter)}">转场 +${formatTime(gapAfter)}</button>` : ''}</div>
       ${renderMajorCooldownCell(majorCooldownBuckets[columnIndex])}
       ${renderBuffCell(derivedState[columnIndex].activeBuffs)}
       <div class="charge-row reassemble-row" title="整备层数 ${derivedState[columnIndex].reassembleCharges} / 2"><i style="width:${(derivedState[columnIndex].reassembleCharges / 2) * 100}%"></i></div>
@@ -731,6 +739,13 @@ function renderTimeline() {
         <i class="battery-bar" title="电量 ${derivedState[columnIndex].battery} / 100" style="height:${derivedState[columnIndex].battery}%"></i>
       </div>
     `;
+    const gapBadge = element.querySelector('.gap-badge');
+    if (gapBadge) {
+      gapBadge.addEventListener('click', event => {
+        event.stopPropagation();
+        editTransitionGap(columnIndex);
+      });
+    }
     element.querySelectorAll('.major-cd-badge').forEach(badge => {
       badge.addEventListener('click', event => {
         event.stopPropagation();
@@ -943,6 +958,35 @@ function addGcdSequence(actionIds, label) {
 }
 
 
+function editTransitionGap(columnIndex = getCurrentColumnIndex()) {
+  let index = Math.max(0, Math.min(plan.length - 1, columnIndex));
+  if (!plan[index].gcd) {
+    const lastGcdIndex = getLastGcdIndex();
+    if (lastGcdIndex >= 0) index = lastGcdIndex;
+  }
+  if (!plan[index].gcd) {
+    showToast('请先选择或放置一个GCD技能，再添加转场空白。');
+    return;
+  }
+
+  const current = getColumnGapAfter(plan[index]);
+  const input = prompt('请输入当前GCD结束后的Boss上天/转场空白秒数；输入0可清除。', current ? String(current) : '5.5');
+  if (input === null) return;
+
+  const normalizedInput = input.trim().replace('秒', '').replace('s', '');
+  const seconds = Number(normalizedInput);
+  if (!Number.isFinite(seconds) || seconds < 0 || seconds > 180) {
+    showToast('转场空白时长需要是 0 到 180 秒之间的数字。');
+    return;
+  }
+
+  plan[index].gapAfter = Math.round(seconds * 10) / 10;
+  renderTimeline();
+  showToast(plan[index].gapAfter
+    ? `已在 ${formatTime(timeOf(index))} 的GCD结束后添加 ${formatTime(plan[index].gapAfter)} 转场空白。`
+    : `已清除 ${formatTime(timeOf(index))} 后的转场空白。`);
+}
+
 function addOverheatCombo() {
   const lastGcdIndex = getLastGcdIndex();
   if (lastGcdIndex < 0) return showToast('请先放置一个GCD技能，再添加过热连。');
@@ -1048,7 +1092,8 @@ function normalizeImportedPlan(imported) {
       ? column.ogcds.slice(0, 3).map(actionId => (actionsById[actionId] ? actionId : null))
       : [null, null, null];
     while (ogcds.length < 3) ogcds.push(null);
-    normalized[index] = { gcd, ogcds };
+    const gapAfter = Number(column?.gapAfter || 0);
+    normalized[index] = { gcd, ogcds, gapAfter: Number.isFinite(gapAfter) && gapAfter > 0 ? Math.min(180, Math.round(gapAfter * 10) / 10) : 0 };
   });
   return normalized;
 }
@@ -1091,6 +1136,7 @@ elements.importPlan.addEventListener('change', event => {
 });
 elements.addBasicCombo.addEventListener('click', () => addGcdSequence(['heated-split-shot', 'heated-slug-shot', 'heated-clean-shot'], '基础连'));
 elements.addOverheatCombo.addEventListener('click', addOverheatCombo);
+elements.addTransitionGap.addEventListener('click', () => editTransitionGap());
 
 elements.reset.addEventListener('click', () => {
   plan = createEmptyPlan();
