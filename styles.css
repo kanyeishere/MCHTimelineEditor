@@ -45,6 +45,9 @@ p { margin: 0; }
 }
 
 .resources meter { width: 118px; }
+.initial-resources { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+.initial-resources label { display: inline-flex; gap: 8px; align-items: center; padding: 8px 10px; border: 1px solid #6a5626; border-radius: 10px; background: #2c2a21; color: #f3d978; font-weight: 800; }
+.initial-resources input { width: 64px; border: 1px solid #d7bc62; border-radius: 7px; background: #151515; color: #fff4c7; padding: 6px 8px; font: inherit; }
 .hero-actions { display: flex; gap: 14px; align-items: center; }
 .hero-actions button, .import-button { color: #171717; background: #d7bc62; border: 0; border-radius: 8px; padding: 10px 15px; cursor: pointer; font-weight: 700; font-size: 14px; white-space: nowrap; }
 #importPlan { position: absolute; inline-size: 1px; block-size: 1px; opacity: 0; pointer-events: none; }
@@ -133,6 +136,7 @@ p { margin: 0; }
 .buff-row { display: flex; flex-wrap: wrap; gap: 2px; align-content: center; justify-content: center; padding: 3px; border-bottom: 1px solid #c8c8c8; background: #fffdf3; overflow: hidden; }
 .buff-badge { display: grid; place-items: center; inline-size: 18px; block-size: 18px; border-radius: 6px; background: linear-gradient(#ffe79a, #ffb34f); box-shadow: 0 0 0 1px #df9d23 inset, 0 2px 5px #0004; }
 .buff-badge img { inline-size: 16px; block-size: 16px; object-fit: cover; border-radius: 5px; }
+.clickable-buff { cursor: pointer; box-shadow: 0 0 0 1px #df9d23 inset, 0 0 0 2px #fff3b0, 0 2px 5px #0004; }
 .charge-row { position: relative; border-bottom: 1px solid #c8c8c8; background: #f6fbff; }
 .charge-row i { position: absolute; inset-block: 7px; left: 0; opacity: .78; }
 .reassemble-row i { background: #d7bc62; }

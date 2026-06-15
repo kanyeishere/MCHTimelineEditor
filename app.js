@@ -1,16 +1,18 @@
 const DEFAULT_GCD_SECONDS = 2.5;
 const START_TIME_SECONDS = -15;
-const MAX_TIME_SECONDS = 20 * 60;
-const SLOT_COUNT = Math.ceil((MAX_TIME_SECONDS - START_TIME_SECONDS) / DEFAULT_GCD_SECONDS) + 1;
+const INITIAL_MAX_TIME_SECONDS = 20 * 60;
+const TIMELINE_TAIL_SECONDS = 240;
+const INITIAL_SLOT_COUNT = Math.ceil((INITIAL_MAX_TIME_SECONDS - START_TIME_SECONDS) / DEFAULT_GCD_SECONDS) + 1;
 const ICON_BASE = 'https://ffxiv.gamerescape.com/wiki/Special:Redirect/file/';
-const MAJOR_COOLDOWN_IDS = ['drill', 'air-anchor', 'chain-saw', 'barrel-stabilizer', 'wildfire'];
+const MAJOR_COOLDOWN_IDS = ['drill', 'air-anchor', 'chain-saw', 'barrel-stabilizer', 'wildfire', 'dexterity-potion'];
 const BUFF_DEFINITIONS = {
   potion: { label: '爆发药', short: '药', actionId: 'dexterity-potion' },
   'barrel-prep': { label: '超荷预备', short: '超', actionId: 'barrel-stabilizer' },
   reassemble: { label: '整备', short: '整', actionId: 'reassemble' },
   overheat: { label: '过热', short: '热', actionId: 'hypercharge' },
   'excavator-prep': { label: '掘地飞轮预备', short: '掘', actionId: 'excavator' },
-  'full-metal-prep': { label: '全金属爆发预备', short: '金', actionId: 'full-metal-field' }
+  'full-metal-prep': { label: '全金属爆发预备', short: '金', actionId: 'full-metal-field' },
+  wildfire: { label: '野火', short: '火', actionId: 'wildfire' }
 };
 
 const actions = [
@@ -26,7 +28,7 @@ const actions = [
   { id: 'heat-blast', hidden: true, cn: '热冲击', en: 'Heat Blast', level: 35, type: 'gcd', category: '职业技能', recast: 1.5, range: '25米', radius: '0米', potency: 200, desc: '过热时可用；追加效果：虹吸弹和弹射的复唱时间缩短15秒。' },
   { id: 'rook-autoturret', hidden: true, cn: '车式浮空炮塔', en: 'Rook Autoturret', level: 40, type: 'ogcd', category: '职业技能', recast: 6, battery: -50, range: '0米', radius: '0米', desc: '消耗50电量部署单体炮塔；与后式自走人偶共享用途。' },
   { id: 'rook-overdrive', hidden: true, cn: '超档车式炮塔', en: 'Rook Overdrive', level: 40, type: 'ogcd', category: '职业技能', recast: 15, range: '25米', radius: '0米', desc: '命令车式浮空炮塔执行超负荷。' },
-  { id: 'wildfire', cn: '野火', en: 'Wildfire', level: 45, type: 'ogcd', category: '职业技能', recast: 120, range: '25米', radius: '0米', desc: '附加野火；持续结束或起爆时根据期间命中的战技次数造成伤害。' },
+  { id: 'wildfire', cn: '野火', en: 'Wildfire', level: 45, type: 'ogcd', category: '职业技能', recast: 120, grantsBuffs: [{ id: 'wildfire', duration: 10 }], range: '25米', radius: '0米', desc: '对目标附加野火状态；持续10秒，或自身对目标命中6次战技后结束。每命中1次战技威力240，最多变化6次。' },
   { id: 'detonator', cn: '起爆', en: 'Detonator', level: 45, type: 'ogcd', category: '职业技能', recast: 1, range: '25米', radius: '0米', desc: '提前结束野火并造成伤害。' },
   { id: 'ricochet', hidden: true, cn: '弹射', en: 'Ricochet', level: 50, type: 'ogcd', category: '职业技能', recast: 30, charges: 3, range: '25米', radius: '5米', potency: 130, desc: '对目标及周围敌人发动范围攻击。最大档数：3。' },
   { id: 'auto-crossbow', cn: '自动弩', en: 'Auto Crossbow', level: 52, type: 'gcd', category: '职业技能', recast: 1.5, requiresOverheat: true, range: '12米', radius: '12米', potency: 140, desc: '过热时可用的扇形范围战技。' },
@@ -65,6 +67,7 @@ const actions = [
 
 const actionsById = Object.fromEntries(actions.map(action => [action.id, action]));
 let plan = createEmptyPlan();
+let initialResources = { heat: 0, battery: 0 };
 let derivedState = [];
 let selectedColumnIndex = null;
 
@@ -83,7 +86,9 @@ const elements = {
   importPlan: document.getElementById('importPlan'),
   addBasicCombo: document.getElementById('addBasicCombo'),
   addOverheatCombo: document.getElementById('addOverheatCombo'),
-  addTransitionGap: document.getElementById('addTransitionGap')
+  addTransitionGap: document.getElementById('addTransitionGap'),
+  initialHeat: document.getElementById('initialHeat'),
+  initialBattery: document.getElementById('initialBattery')
 };
 
 let timelineColumnWidth = 66;
@@ -116,8 +121,27 @@ function enableHorizontalWheelScroll() {
   }, { passive: false });
 }
 
+function clampResource(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 0;
+  return Math.max(0, Math.min(100, Math.round(number)));
+}
+
+function getInitialResourceState() {
+  return { heat: initialResources.heat, battery: initialResources.battery, buffs: {}, overheatStacks: 0, wildfireHits: 0 };
+}
+
+function updateInitialResourceInputs() {
+  if (elements.initialHeat) elements.initialHeat.value = initialResources.heat;
+  if (elements.initialBattery) elements.initialBattery.value = initialResources.battery;
+}
+
+function createEmptyColumn() {
+  return { gcd: null, ogcds: [null, null, null], gapAfter: 0, gapName: '转场' };
+}
+
 function createEmptyPlan() {
-  return Array.from({ length: SLOT_COUNT }, () => ({ gcd: null, ogcds: [null, null, null], gapAfter: 0, gapName: '转场' }));
+  return Array.from({ length: INITIAL_SLOT_COUNT }, createEmptyColumn);
 }
 
 function getColumnGcdDuration(column) {
@@ -144,6 +168,27 @@ function escapeHtml(value) {
     .replaceAll("'", '&#39;');
 }
 
+
+function getTimelineEndTime(times = getTimelineTimes()) {
+  return times.at(-1) ?? START_TIME_SECONDS;
+}
+
+function getSimulationEndTime(times = getTimelineTimes()) {
+  return Math.max(INITIAL_MAX_TIME_SECONDS, getTimelineEndTime(times) + TIMELINE_TAIL_SECONDS);
+}
+
+function ensurePlanCoversTimelineTail() {
+  let times = getTimelineTimes();
+  const lastGcdIndex = getLastGcdIndex();
+  const desiredEnd = lastGcdIndex >= 0
+    ? Math.max(INITIAL_MAX_TIME_SECONDS, timeOf(lastGcdIndex, times) + TIMELINE_TAIL_SECONDS)
+    : INITIAL_MAX_TIME_SECONDS;
+
+  while (getTimelineEndTime(times) < desiredEnd) {
+    plan.push(createEmptyColumn());
+    times = getTimelineTimes();
+  }
+}
 
 function getTimelineTimes() {
   const times = [];
@@ -287,7 +332,7 @@ function getChargeRecoveryEventsFromFacts(actionId, facts) {
   const action = actionsById[actionId];
   if (!action?.charges) return [];
   const useTimes = facts.useTimesByAction.get(actionId) || [];
-  return simulateChargeState(actionId, MAX_TIME_SECONDS, useTimes, facts).recoveryEvents;
+  return simulateChargeState(actionId, getSimulationEndTime(), useTimes, facts).recoveryEvents;
 }
 
 function getRobotEventsFromFacts(facts) {
@@ -315,7 +360,7 @@ function getMajorCooldownEventsFromFacts(facts) {
   });
 
   return events
-    .filter(event => event.time >= START_TIME_SECONDS && event.time <= MAX_TIME_SECONDS)
+    .filter(event => event.time >= START_TIME_SECONDS && event.time <= getSimulationEndTime())
     .sort((a, b) => a.time - b.time || MAJOR_COOLDOWN_IDS.indexOf(a.actionId) - MAJOR_COOLDOWN_IDS.indexOf(b.actionId));
 }
 
@@ -325,12 +370,25 @@ function bucketEventsByColumn(events, times) {
 
   events.forEach(event => {
     while (columnIndex < times.length - 1 && event.time >= times[columnIndex + 1]) columnIndex += 1;
-    if (event.time >= times[columnIndex] && event.time < (times[columnIndex + 1] ?? Infinity)) {
-      buckets[columnIndex].push(event);
-    }
+    const displayColumnIndex = getCooldownDisplayColumnIndex(event.time, columnIndex, times);
+    if (displayColumnIndex >= 0 && displayColumnIndex < buckets.length) buckets[displayColumnIndex].push(event);
   });
 
   return buckets;
+}
+
+function getCooldownDisplayColumnIndex(eventTime, columnIndex, times) {
+  const column = plan[columnIndex];
+  const columnStart = times[columnIndex];
+  const columnEnd = times[columnIndex + 1] ?? Infinity;
+  if (eventTime < columnStart || eventTime >= columnEnd) return -1;
+
+  const gapAfter = getColumnGapAfter(column);
+  if (!gapAfter || columnIndex >= plan.length - 1) return columnIndex;
+
+  const transitionStart = columnStart + getColumnBaseDuration(column);
+  if (eventTime >= transitionStart && eventTime < columnEnd) return columnIndex + 1;
+  return columnIndex;
 }
 
 function bucketRobotEventsByColumn(events, times) {
@@ -429,6 +487,7 @@ function grantActionBuffs(resources, action, releaseTime) {
   action.grantsBuffs.forEach(buff => {
     buffs[buff.id] = releaseTime + buff.duration;
     if (buff.id === 'overheat') resources.overheatStacks = 5;
+    if (buff.id === 'wildfire') resources.wildfireHits = 0;
   });
 }
 
@@ -439,6 +498,10 @@ function consumeActionBuffs(resources, action, releaseTime) {
   if (action.requiresOverheat && isBuffActive(resources, 'overheat', releaseTime)) {
     resources.overheatStacks = Math.max(0, (resources.overheatStacks || 0) - 1);
     if (resources.overheatStacks <= 0) delete buffs.overheat;
+  }
+  if (action.type === 'gcd' && isBuffActive(resources, 'wildfire', releaseTime)) {
+    resources.wildfireHits = (resources.wildfireHits || 0) + 1;
+    if (resources.wildfireHits >= 6) delete buffs.wildfire;
   }
   if (action.type === 'gcd' && isBuffActive(resources, 'reassemble', releaseTime)) delete buffs.reassemble;
 }
@@ -460,7 +523,7 @@ function applyResourceChange(resources, actionId, releaseTime = START_TIME_SECON
 }
 
 function getResourcesBefore(columnIndex, kind, ogcdIndex = 0, times = getTimelineTimes()) {
-  const resources = { heat: 0, battery: 0, buffs: {}, overheatStacks: 0 };
+  const resources = getInitialResourceState();
 
   for (let index = 0; index < columnIndex; index += 1) {
     const column = plan[index];
@@ -484,7 +547,7 @@ function getResourcesBefore(columnIndex, kind, ogcdIndex = 0, times = getTimelin
 }
 
 function deriveState(times = getTimelineTimes(), facts = collectTimelineFacts(times)) {
-  const resources = { heat: 0, battery: 0, buffs: {}, overheatStacks: 0 };
+  const resources = getInitialResourceState();
   derivedState = plan.map((column, columnIndex) => {
     const baseTime = timeOf(columnIndex, times);
     if (column.gcd) applyResourceChange(resources, column.gcd, baseTime);
@@ -707,6 +770,7 @@ function renderTooltip(action) {
 }
 
 function renderTimeline() {
+  ensurePlanCoversTimelineTail();
   const times = getTimelineTimes();
   const facts = collectTimelineFacts(times);
   const buffWindows = getBuffWindows(times);
@@ -759,6 +823,12 @@ function renderTimeline() {
         addMajorCooldownAction(badge.dataset.actionId, columnIndex);
       });
     });
+    element.querySelectorAll('.buff-badge[data-action-id]').forEach(badge => {
+      badge.addEventListener('click', event => {
+        event.stopPropagation();
+        addMajorCooldownAction(badge.dataset.actionId, columnIndex);
+      });
+    });
     element.append(createSlot(columnIndex, 'gcd', null, column.gcd, false, timeOf(columnIndex, times), buffWindows));
     [0, 1, 2].forEach(slotIndex => {
       element.append(createSlot(columnIndex, 'ogcd', slotIndex, column.ogcds[slotIndex], slotIndex >= maxOgcdSlotsFor(column), timeOf(columnIndex, times) + ((slotIndex + 1) * 0.6), buffWindows));
@@ -794,9 +864,19 @@ function renderBuffCell(activeBuffs) {
   const content = activeBuffs.map(buff => {
     const action = actionsById[buff.actionId];
     const icon = action?.icon || '';
-    return `<span class="buff-badge buff-${buff.id}" title="${buff.label}"><img src="${icon}" alt="${buff.label}"></span>`;
+    const clickTarget = getBuffClickActionId(buff.id);
+    const clickable = clickTarget ? ` data-action-id="${clickTarget}" title="${buff.label}：点击添加 ${actionsById[clickTarget]?.cn || ''}"` : ` title="${buff.label}"`;
+    return `<span class="buff-badge buff-${buff.id} ${clickTarget ? 'clickable-buff' : ''}"${clickable}><img src="${icon}" alt="${buff.label}"></span>`;
   }).join('');
-  return `<div class="buff-row" title="Buff：爆发药 / 超荷预备 / 整备 / 过热 / 掘地飞轮预备 / 全金属爆发预备">${content}</div>`;
+  return `<div class="buff-row" title="Buff：爆发药 / 野火 / 超荷预备 / 整备 / 过热 / 掘地飞轮预备 / 全金属爆发预备">${content}</div>`;
+}
+
+function getBuffClickActionId(buffId) {
+  return {
+    'excavator-prep': 'excavator',
+    'full-metal-prep': 'full-metal-field',
+    'barrel-prep': 'hypercharge'
+  }[buffId] || null;
 }
 
 function renderMajorCooldownCell(events) {
@@ -807,7 +887,7 @@ function renderMajorCooldownCell(events) {
       : `${action.cn} 在 ${formatTime(event.time)} 转好`;
     return `<span class="major-cd-badge ${event.kind}" data-action-id="${event.actionId}" title="${title}"><img src="${action.icon}" alt="${action.cn}"><small>${formatTime(event.time)}</small></span>`;
   }).join('');
-  return `<div class="major-cd-row" title="大技能CD提醒：钻头 / 空气锚 / 回转飞锯 / 枪管加热 / 野火">${content}</div>`;
+  return `<div class="major-cd-row" title="大技能CD提醒：钻头 / 空气锚 / 回转飞锯 / 枪管加热 / 野火 / 爆发药水">${content}</div>`;
 }
 
 function createSlot(columnIndex, kind, ogcdIndex, actionId, disabled = false, releaseTime = timeOf(columnIndex), buffWindows = []) {
@@ -966,6 +1046,62 @@ function addActionByClick(actionId) {
   placeAction(action, columnIndex, 'ogcd', ogcdIndex);
 }
 
+function isColumnEmpty(column) {
+  return !column.gcd && column.ogcds.every(actionId => !actionId);
+}
+
+function findPreviousGcdSlot(startIndex) {
+  for (let index = Math.max(0, startIndex); index >= 0; index -= 1) {
+    if (plan[index].gcd) return index;
+  }
+  return -1;
+}
+
+function findNextNonEmptyColumn(startIndex) {
+  for (let index = Math.max(0, startIndex); index < plan.length; index += 1) {
+    if (!isColumnEmpty(plan[index])) return index;
+  }
+  return -1;
+}
+
+function canCollapseBlankColumns(anchorIndex, nextIndex) {
+  if (nextIndex <= anchorIndex + 1) return false;
+  for (let index = anchorIndex + 1; index < nextIndex; index += 1) {
+    if (!isColumnEmpty(plan[index])) return false;
+  }
+  return true;
+}
+
+function collapseBlankColumns(anchorIndex, nextIndex) {
+  const removeCount = nextIndex - anchorIndex - 1;
+  if (removeCount <= 0) return;
+  for (let index = anchorIndex + 1; index < plan.length - removeCount; index += 1) {
+    plan[index] = plan[index + removeCount];
+  }
+  for (let index = plan.length - removeCount; index < plan.length; index += 1) {
+    plan[index] = createEmptyColumn();
+  }
+}
+
+function resolveTransitionEditTarget(columnIndex, times) {
+  const selectedIndex = Math.max(0, Math.min(plan.length - 1, columnIndex));
+  if (plan[selectedIndex].gcd) {
+    return { anchorIndex: selectedIndex, defaultGap: getColumnGapAfter(plan[selectedIndex]), collapseNextIndex: -1 };
+  }
+
+  const anchorIndex = findPreviousGcdSlot(selectedIndex);
+  if (anchorIndex < 0) return { anchorIndex: -1, defaultGap: 0, collapseNextIndex: -1 };
+
+  const existingGap = getColumnGapAfter(plan[anchorIndex]);
+  const nextIndex = findNextNonEmptyColumn(anchorIndex + 1);
+  const shouldCollapse = !existingGap && canCollapseBlankColumns(anchorIndex, nextIndex);
+  const blankDuration = shouldCollapse
+    ? Math.max(0, timeOf(nextIndex, times) - (timeOf(anchorIndex, times) + getColumnBaseDuration(plan[anchorIndex])))
+    : existingGap;
+
+  return { anchorIndex, defaultGap: blankDuration, collapseNextIndex: shouldCollapse ? nextIndex : -1 };
+}
+
 function addGcdSequence(actionIds, label) {
   let nextIndex = findNextEmptyGcdSlot(getLastGcdIndex() + 1);
   if (nextIndex < 0) return showToast('后续没有空的GCD格。');
@@ -984,18 +1120,15 @@ function addGcdSequence(actionIds, label) {
 
 
 function editTransitionGap(columnIndex = getCurrentColumnIndex()) {
-  let index = Math.max(0, Math.min(plan.length - 1, columnIndex));
-  if (!plan[index].gcd) {
-    const lastGcdIndex = getLastGcdIndex();
-    if (lastGcdIndex >= 0) index = lastGcdIndex;
-  }
-  if (!plan[index].gcd) {
+  const times = getTimelineTimes();
+  const target = resolveTransitionEditTarget(columnIndex, times);
+  const index = target.anchorIndex;
+  if (index < 0 || !plan[index].gcd) {
     showToast('请先选择或放置一个GCD技能，再添加转场空白。');
     return;
   }
 
-  const current = getColumnGapAfter(plan[index]);
-  const input = prompt('请输入当前GCD结束后的Boss上天/转场空白秒数；输入0可清除。', current ? String(current) : '5.5');
+  const input = prompt('请输入当前GCD结束后的Boss上天/转场空白秒数；输入0可清除。', target.defaultGap ? String(Number(target.defaultGap.toFixed(1))) : '5.5');
   if (input === null) return;
 
   const normalizedInput = input.trim().replace('秒', '').replace('s', '');
@@ -1013,12 +1146,13 @@ function editTransitionGap(columnIndex = getCurrentColumnIndex()) {
     gapName = nameInput.trim().slice(0, 20) || '转场';
   }
 
+  if (target.collapseNextIndex > 0) collapseBlankColumns(index, target.collapseNextIndex);
   plan[index].gapAfter = roundedSeconds;
   plan[index].gapName = gapName;
   renderTimeline();
   showToast(plan[index].gapAfter
-    ? `已在 ${formatTime(timeOf(index))} 的GCD结束后添加 ${gapName} ${formatTime(plan[index].gapAfter)}。`
-    : `已清除 ${formatTime(timeOf(index))} 后的转场空白。`);
+    ? `已在 ${formatTime(timeOf(index, times))} 的GCD结束后添加 ${gapName} ${formatTime(plan[index].gapAfter)}。`
+    : `已清除 ${formatTime(timeOf(index, times))} 后的转场空白。`);
 }
 
 function addOverheatCombo() {
@@ -1078,6 +1212,7 @@ function serializePlan() {
   return {
     version: 1,
     exportedAt: new Date().toISOString(),
+    initialResources,
     plan
   };
 }
@@ -1115,12 +1250,20 @@ function sanitizeCurrentPlan() {
   return removed;
 }
 
+function normalizeImportedResources(imported) {
+  const source = imported?.initialResources || {};
+  return {
+    heat: clampResource(source.heat),
+    battery: clampResource(source.battery)
+  };
+}
+
 function normalizeImportedPlan(imported) {
   const rawPlan = Array.isArray(imported) ? imported : imported?.plan;
   if (!Array.isArray(rawPlan)) throw new Error('导入文件中没有可识别的 plan 数组。');
 
-  const normalized = createEmptyPlan();
-  rawPlan.slice(0, SLOT_COUNT).forEach((column, index) => {
+  const normalized = Array.from({ length: Math.max(INITIAL_SLOT_COUNT, rawPlan.length) }, createEmptyColumn);
+  rawPlan.forEach((column, index) => {
     const gcd = actionsById[column?.gcd] ? column.gcd : null;
     const ogcds = Array.isArray(column?.ogcds)
       ? column.ogcds.slice(0, 3).map(actionId => (actionsById[actionId] ? actionId : null))
@@ -1151,7 +1294,10 @@ function importTimeline(file) {
   const reader = new FileReader();
   reader.addEventListener('load', () => {
     try {
-      plan = normalizeImportedPlan(JSON.parse(reader.result));
+      const imported = JSON.parse(reader.result);
+      initialResources = normalizeImportedResources(imported);
+      updateInitialResourceInputs();
+      plan = normalizeImportedPlan(imported);
       const removed = sanitizeCurrentPlan();
       showToast(removed ? `已导入 ${file.name}，并移除了 ${removed} 个缺少预备/资源的非法技能。` : `已导入 ${file.name}。`);
       renderTimeline();
@@ -1172,14 +1318,26 @@ elements.importPlan.addEventListener('change', event => {
 elements.addBasicCombo.addEventListener('click', () => addGcdSequence(['heated-split-shot', 'heated-slug-shot', 'heated-clean-shot'], '基础连'));
 elements.addOverheatCombo.addEventListener('click', addOverheatCombo);
 elements.addTransitionGap.addEventListener('click', () => editTransitionGap());
+[elements.initialHeat, elements.initialBattery].forEach(input => {
+  input?.addEventListener('input', () => {
+    initialResources = {
+      heat: clampResource(elements.initialHeat?.value),
+      battery: clampResource(elements.initialBattery?.value)
+    };
+    renderTimeline();
+  });
+});
 
 elements.reset.addEventListener('click', () => {
   plan = createEmptyPlan();
+  initialResources = { heat: 0, battery: 0 };
+  updateInitialResourceInputs();
   selectedColumnIndex = null;
   showToast('已重置时间轴。');
   renderTimeline();
 });
 
 enableHorizontalWheelScroll();
+updateInitialResourceInputs();
 renderPalette();
 renderTimeline();

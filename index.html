@@ -11,6 +11,10 @@
       <div class="hero-copy">
         <p class="eyebrow">Machinist Timeline Editor</p>
         <h1>FF14 机工士 PVE 技能时间轴模拟器</h1>
+        <div class="initial-resources" aria-label="初始资源设置">
+          <label>初始热量 <input id="initialHeat" type="number" min="0" max="100" step="1" value="0"></label>
+          <label>初始电量 <input id="initialBattery" type="number" min="0" max="100" step="1" value="0"></label>
+        </div>
       </div>
       <div class="hero-actions">
         <button id="exportPlan" type="button">⇩ 导出</button>
@@ -53,7 +57,7 @@
     </main>
 
     <footer>
-      时间轴从 -15s 开始，最长 20 分钟；能力技按 +0.6s、+1.2s、+1.8s 顺序显示，爆发药水30秒内的本体与机器人技能会高亮；战斗前倒计时 [-15s, 0s) 的GCD格也允许放置能力技。
+      时间轴从 -15s 开始，会自动延伸到最后一个已放置GCD之后至少240秒；能力技按 +0.6s、+1.2s、+1.8s 顺序显示，爆发药水30秒内的本体与机器人技能会高亮；战斗前倒计时 [-15s, 0s) 的GCD格也允许放置能力技。
     </footer>
 
     <script src="app.js"></script>
