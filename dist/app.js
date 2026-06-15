@@ -198,19 +198,29 @@ function getReductionFromFacts(actionId, useTime, targetTime, facts) {
   return 0;
 }
 
+function getReductionEventTimes(actionId, facts) {
+  if (!facts) return [];
+  if (actionId === 'gauss-round' || actionId === 'ricochet') return facts.heatBlastTimes;
+  if (actionId === 'double-check' || actionId === 'checkmate') return facts.blazingShotTimes;
+  return [];
+}
+
 function getChargeRecoveryTime(actionId, cooldownStartTime, facts) {
   const action = actionsById[actionId];
   const recast = action?.recast || DEFAULT_GCD_SECONDS;
-  if (!facts) return cooldownStartTime + recast;
+  let remaining = recast;
+  let cursor = cooldownStartTime;
+  const reductionTimes = getReductionEventTimes(actionId, facts).filter(time => time > cooldownStartTime).sort((a, b) => a - b);
 
-  let recoveryTime = cooldownStartTime + recast;
-  for (let index = 0; index < 6; index += 1) {
-    const reducedRecast = Math.max(0, recast - getReductionFromFacts(actionId, cooldownStartTime, recoveryTime, facts));
-    const nextRecoveryTime = cooldownStartTime + reducedRecast;
-    if (Math.abs(nextRecoveryTime - recoveryTime) < 0.001) return nextRecoveryTime;
-    recoveryTime = nextRecoveryTime;
+  for (const reductionTime of reductionTimes) {
+    if (cursor + remaining <= reductionTime) return cursor + remaining;
+    remaining -= reductionTime - cursor;
+    cursor = reductionTime;
+    remaining = Math.max(0, remaining - 15);
+    if (remaining <= 0) return cursor;
   }
-  return recoveryTime;
+
+  return cursor + remaining;
 }
 
 function simulateChargeState(actionId, atTime, useTimes, facts) {
