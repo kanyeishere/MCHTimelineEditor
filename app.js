@@ -3,7 +3,7 @@ const START_TIME_SECONDS = -15;
 const INITIAL_MAX_TIME_SECONDS = 20 * 60;
 const TIMELINE_TAIL_SECONDS = 240;
 const INITIAL_SLOT_COUNT = Math.ceil((INITIAL_MAX_TIME_SECONDS - START_TIME_SECONDS) / DEFAULT_GCD_SECONDS) + 1;
-const ICON_BASE = 'https://ffxiv.gamerescape.com/wiki/Special:Redirect/file/';
+const ICON_BASE = 'assets/icons/';
 const MAJOR_COOLDOWN_IDS = ['drill', 'air-anchor', 'chain-saw', 'barrel-stabilizer', 'wildfire', 'dexterity-potion'];
 const BUFF_DEFINITIONS = {
   potion: { label: '爆发药', short: '药', actionId: 'dexterity-potion' },
@@ -61,7 +61,7 @@ const actions = [
   { id: 'arms-length', hidden: true, cn: '亲疏自行', en: "Arm's Length", level: 32, type: 'ogcd', category: '职能技能', recast: 120, range: '0米', radius: '0米', desc: '令自身免疫大多数击退与吸引效果。' }
 ].map(action => ({
   ...action,
-  icon: `${ICON_BASE}${encodeURIComponent(action.en.replaceAll(' ', '_') + '_Icon.png')}`,
+  icon: `${ICON_BASE}${action.id}.svg`,
   gcdDuration: action.type === 'gcd' ? (action.recast === 1.5 ? 1.5 : 2.5) : 0
 }));
 
