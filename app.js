@@ -306,35 +306,44 @@ function getChargeRecoveryTime(actionId, cooldownStartTime, facts) {
 function simulateChargeState(actionId, atTime, useTimes, facts) {
   const action = actionsById[actionId];
   const maxCharges = action?.charges || 1;
-  const recoveryQueue = [];
   const recoveryEvents = [];
+  let charges = maxCharges;
+  let nextRecoveryTime = null;
   let blockedUseTime = null;
 
+  const startRecoveryFrom = startTime => {
+    if (nextRecoveryTime === null) nextRecoveryTime = getChargeRecoveryTime(actionId, startTime, facts);
+  };
+
   const recoverUntil = (limitTime, includeEqual = true) => {
-    while (recoveryQueue.length && (includeEqual ? recoveryQueue[0] <= limitTime : recoveryQueue[0] < limitTime)) {
-      recoveryEvents.push(recoveryQueue.shift());
+    while (nextRecoveryTime !== null && (includeEqual ? nextRecoveryTime <= limitTime : nextRecoveryTime < limitTime)) {
+      const recoveredAt = nextRecoveryTime;
+      recoveryEvents.push(recoveredAt);
+      charges = Math.min(maxCharges, charges + 1);
+      nextRecoveryTime = charges >= maxCharges ? null : getChargeRecoveryTime(actionId, recoveredAt, facts);
     }
   };
 
   useTimes.filter(useTime => useTime <= atTime).sort((a, b) => a - b).forEach(useTime => {
-    // 已经放在时间轴上的同一时刻使用与充能恢复，要先结算使用再结算恢复。
-    // 这样旧版导入轴里“钻头在恢复点同一列再次使用”时，不会把正在排队的下一次恢复吞掉。
+    // 同一时刻使用会先消耗已有层数，再结算该时刻恢复，避免导入旧轴时改变可用性。
+    // 但只要层数没有回满，充能计时就会持续向下一层推进；例如钻头 200s 回到 1 层后，
+    // 即使 212s 再次使用，下一层仍应在 220s 恢复，而不是从 212s 重新开始计时。
     recoverUntil(useTime, false);
-    const availableCharges = maxCharges - recoveryQueue.length;
-    if (availableCharges <= 0) {
+    if (charges <= 0) {
       blockedUseTime ??= useTime;
       return;
     }
 
-    const cooldownStartTime = recoveryQueue.length ? recoveryQueue[recoveryQueue.length - 1] : useTime;
-    recoveryQueue.push(getChargeRecoveryTime(actionId, cooldownStartTime, facts));
+    charges -= 1;
+    startRecoveryFrom(useTime);
+    recoverUntil(useTime, true);
   });
 
   recoverUntil(atTime);
 
   return {
-    charges: maxCharges - recoveryQueue.length,
-    nextRecoveryTime: recoveryQueue[0] ?? null,
+    charges,
+    nextRecoveryTime,
     recoveryEvents,
     blockedUseTime
   };
