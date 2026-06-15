@@ -1,0 +1,276 @@
+const GCD_SECONDS = 2.5;
+const SLOT_COUNT = 36;
+const ICON_BASE = 'https://ffxiv.gamerescape.com/wiki/Special:Redirect/file/';
+
+const actions = [
+  { id: 'split-shot', cn: '分裂弹', en: 'Split Shot', level: 1, type: 'gcd', category: '职业技能', recast: 2.5, range: '25米', radius: '0米', potency: 140, heat: 5, desc: '对目标发动远距离物理攻击。追加效果：热量 +5。' },
+  { id: 'slug-shot', cn: '独头弹', en: 'Slug Shot', level: 2, type: 'gcd', category: '职业技能', recast: 2.5, range: '25米', radius: '0米', potency: 100, heat: 5, desc: '连击：分裂弹/热分裂弹。连击成功时威力提高并增加热量。' },
+  { id: 'hot-shot', cn: '热弹', en: 'Hot Shot', level: 4, type: 'gcd', category: '职业技能', recast: 40, range: '25米', radius: '0米', potency: 240, battery: 20, desc: '不与其他战技共享复唱。追加效果：电量 +20。' },
+  { id: 'reassemble', cn: '整备', en: 'Reassemble', level: 10, type: 'ogcd', category: '职业技能', recast: 55, charges: 2, range: '0米', radius: '0米', desc: '令下一个战技必定暴击并直击。最大档数：2。' },
+  { id: 'gauss-round', cn: '虹吸弹', en: 'Gauss Round', level: 15, type: 'ogcd', category: '职业技能', recast: 30, charges: 3, range: '25米', radius: '0米', potency: 130, desc: '对目标发动远距离物理攻击。最大档数：3。' },
+  { id: 'spread-shot', cn: '散射', en: 'Spread Shot', level: 18, type: 'gcd', category: '职业技能', recast: 2.5, range: '12米', radius: '12米', potency: 110, heat: 5, desc: '向目标方向发动扇形范围攻击。追加效果：热量 +5。' },
+  { id: 'clean-shot', cn: '狙击弹', en: 'Clean Shot', level: 26, type: 'gcd', category: '职业技能', recast: 2.5, range: '25米', radius: '0米', potency: 100, heat: 5, battery: 10, desc: '连击：独头弹/热独头弹。连击成功时热量 +5、电量 +10。' },
+  { id: 'hypercharge', cn: '超荷', en: 'Hypercharge', level: 30, type: 'ogcd', category: '职业技能', recast: 10, heat: -50, range: '0米', radius: '0米', desc: '消耗50热量，获得5档过热，可执行烈焰弹/自动弩。' },
+  { id: 'heat-blast', cn: '热冲击', en: 'Heat Blast', level: 35, type: 'gcd', category: '职业技能', recast: 1.5, range: '25米', radius: '0米', potency: 200, desc: '过热时可用；缩短虹吸弹与弹射的复唱时间。' },
+  { id: 'rook-autoturret', cn: '车式浮空炮塔', en: 'Rook Autoturret', level: 40, type: 'ogcd', category: '职业技能', recast: 6, battery: -50, range: '0米', radius: '0米', desc: '消耗50电量部署单体炮塔；与后式自走人偶共享用途。' },
+  { id: 'rook-overdrive', cn: '超档车式炮塔', en: 'Rook Overdrive', level: 40, type: 'ogcd', category: '职业技能', recast: 15, range: '25米', radius: '0米', desc: '命令车式浮空炮塔执行超负荷。' },
+  { id: 'wildfire', cn: '野火', en: 'Wildfire', level: 45, type: 'ogcd', category: '职业技能', recast: 120, range: '25米', radius: '0米', desc: '附加野火；持续结束或起爆时根据期间命中的战技次数造成伤害。' },
+  { id: 'detonator', cn: '起爆', en: 'Detonator', level: 45, type: 'ogcd', category: '职业技能', recast: 1, range: '25米', radius: '0米', desc: '提前结束野火并造成伤害。' },
+  { id: 'ricochet', cn: '弹射', en: 'Ricochet', level: 50, type: 'ogcd', category: '职业技能', recast: 30, charges: 3, range: '25米', radius: '5米', potency: 130, desc: '对目标及周围敌人发动范围攻击。最大档数：3。' },
+  { id: 'auto-crossbow', cn: '自动弩', en: 'Auto Crossbow', level: 52, type: 'gcd', category: '职业技能', recast: 1.5, range: '12米', radius: '12米', potency: 140, desc: '过热时可用的扇形范围战技。' },
+  { id: 'heated-split-shot', cn: '热分裂弹', en: 'Heated Split Shot', level: 54, type: 'gcd', category: '职业技能', recast: 2.5, range: '25米', radius: '0米', potency: 220, heat: 5, desc: '分裂弹的强化版。追加效果：热量 +5。' },
+  { id: 'tactician', cn: '策动', en: 'Tactician', level: 56, type: 'ogcd', category: '职业技能', recast: 90, range: '0米', radius: '30米', desc: '降低自身与周围队员受到的伤害。' },
+  { id: 'drill', cn: '钻头', en: 'Drill', level: 58, type: 'gcd', category: '职业技能', recast: 20, range: '25米', radius: '0米', potency: 660, desc: '强力单体战技；拥有独立复唱时间。' },
+  { id: 'heated-slug-shot', cn: '热独头弹', en: 'Heated Slug Shot', level: 60, type: 'gcd', category: '职业技能', recast: 2.5, range: '25米', radius: '0米', potency: 140, heat: 5, desc: '独头弹的强化版；连击成功时提高威力并增加热量。' },
+  { id: 'dismantle', cn: '武装解除', en: 'Dismantle', level: 62, type: 'ogcd', category: '职业技能', recast: 120, range: '25米', radius: '0米', desc: '降低目标造成的伤害。' },
+  { id: 'heated-clean-shot', cn: '热狙击弹', en: 'Heated Clean Shot', level: 64, type: 'gcd', category: '职业技能', recast: 2.5, range: '25米', radius: '0米', potency: 160, heat: 5, battery: 10, desc: '狙击弹的强化版；连击成功时热量 +5、电量 +10。' },
+  { id: 'barrel-stabilizer', cn: '枪管加热', en: 'Barrel Stabilizer', level: 66, type: 'ogcd', category: '职业技能', recast: 120, heat: 50, range: '0米', radius: '0米', desc: '增加热量50。' },
+  { id: 'blazing-shot', cn: '烈焰弹', en: 'Blazing Shot', level: 68, type: 'gcd', category: '职业技能', recast: 1.5, range: '25米', radius: '0米', potency: 220, desc: '热冲击的强化版；过热时可用，复唱1.5秒。' },
+  { id: 'flamethrower', cn: '火焰喷射器', en: 'Flamethrower', level: 70, type: 'ogcd', category: '职业技能', recast: 60, range: '0米', radius: '8米', desc: '持续向前方范围喷射火焰。移动或转身会取消。' },
+  { id: 'bioblaster', cn: '毒菌冲击', en: 'Bioblaster', level: 72, type: 'gcd', category: '职业技能', recast: 20, range: '12米', radius: '12米', potency: 50, desc: '范围战技并附加持续伤害；与钻头共享用途场景。' },
+  { id: 'air-anchor', cn: '空气锚', en: 'Air Anchor', level: 76, type: 'gcd', category: '职业技能', recast: 40, range: '25米', radius: '0米', potency: 660, battery: 20, desc: '热弹的强化版；不与其他战技共享复唱。追加效果：电量 +20。' },
+  { id: 'automaton-queen', cn: '后式自走人偶', en: 'Automaton Queen', level: 80, type: 'ogcd', category: '职业技能', recast: 6, battery: -50, range: '0米', radius: '0米', desc: '消耗50电量召唤后式自走人偶进行攻击。' },
+  { id: 'pile-bunker', cn: '打桩枪', en: 'Pile Bunker', level: 80, type: 'ogcd', category: '职业技能', recast: 1, range: '3米', radius: '0米', potency: 680, desc: '后式自走人偶的强力单体攻击。' },
+  { id: 'roller-dash', cn: '滚轮冲', en: 'Roller Dash', level: 80, type: 'ogcd', category: '职业技能', recast: 3, range: '0米', radius: '0米', desc: '后式自走人偶突进到目标附近。' },
+  { id: 'crowned-collider', cn: '王室对撞机', en: 'Crowned Collider', level: 86, type: 'ogcd', category: '职业技能', recast: 1, range: '3米', radius: '0米', potency: 780, desc: '后式自走人偶的终结攻击。' },
+  { id: 'chain-saw', cn: '回转飞锯', en: 'Chain Saw', level: 90, type: 'gcd', category: '职业技能', recast: 60, range: '25米', radius: '25米直线', potency: 660, battery: 20, desc: '直线范围战技；追加效果：电量 +20。' },
+  { id: 'double-check', cn: '双将', en: 'Double Check', level: 92, type: 'ogcd', category: '职业技能', recast: 1, charges: 3, range: '25米', radius: '0米', potency: 160, desc: '虹吸弹的强化版。最大档数：3。' },
+  { id: 'checkmate', cn: '将死', en: 'Checkmate', level: 92, type: 'ogcd', category: '职业技能', recast: 1, charges: 3, range: '25米', radius: '5米', potency: 160, desc: '弹射的强化版。最大档数：3。' },
+  { id: 'excavator', cn: '掘地飞轮', en: 'Excavator', level: 96, type: 'gcd', category: '职业技能', recast: 2.5, range: '25米', radius: '25米直线', potency: 620, battery: 20, desc: '回转飞锯后获得预备效果时可用，追加电量。' },
+  { id: 'full-metal-field', cn: '全金属爆发', en: 'Full Metal Field', level: 100, type: 'gcd', category: '职业技能', recast: 2.5, range: '25米', radius: '5米', potency: 900, desc: '强力范围战技；通常由枪管加热相关效果触发。' },
+  { id: 'second-wind', cn: '内丹', en: 'Second Wind', level: 8, type: 'ogcd', category: '职能技能', recast: 120, range: '0米', radius: '0米', desc: '恢复自身HP。' },
+  { id: 'leg-graze', cn: '伤腿', en: 'Leg Graze', level: 6, type: 'ogcd', category: '职能技能', recast: 30, range: '25米', radius: '0米', desc: '对目标附加加重。' },
+  { id: 'foot-graze', cn: '伤足', en: 'Foot Graze', level: 10, type: 'ogcd', category: '职能技能', recast: 30, range: '25米', radius: '0米', desc: '对目标附加止步。' },
+  { id: 'head-graze', cn: '伤头', en: 'Head Graze', level: 24, type: 'ogcd', category: '职能技能', recast: 30, range: '25米', radius: '0米', desc: '打断目标咏唱。' },
+  { id: 'peloton', cn: '速行', en: 'Peloton', level: 20, type: 'ogcd', category: '职能技能', recast: 5, range: '0米', radius: '30米', desc: '非战斗状态下提高自身与周围队员移动速度。' },
+  { id: 'arms-length', cn: '亲疏自行', en: "Arm's Length", level: 32, type: 'ogcd', category: '职能技能', recast: 120, range: '0米', radius: '0米', desc: '令自身免疫大多数击退与吸引效果。' }
+].map(action => ({
+  ...action,
+  icon: `${ICON_BASE}${encodeURIComponent(action.en.replaceAll(' ', '_') + '_Icon.png')}`
+}));
+
+const actionsById = Object.fromEntries(actions.map(action => [action.id, action]));
+let plan = createEmptyPlan();
+let derivedState = [];
+
+const elements = {
+  palette: document.getElementById('palette'),
+  grid: document.getElementById('grid'),
+  toast: document.getElementById('toast'),
+  heatNow: document.getElementById('heatNow'),
+  heatMeter: document.getElementById('heatMeter'),
+  batteryNow: document.getElementById('batteryNow'),
+  batteryMeter: document.getElementById('batteryMeter'),
+  doubleNow: document.getElementById('doubleNow'),
+  checkNow: document.getElementById('checkNow'),
+  reset: document.getElementById('reset')
+};
+
+function createEmptyPlan() {
+  return Array.from({ length: SLOT_COUNT }, () => ({ gcd: null, ogcds: [null, null, null] }));
+}
+
+function timeOf(slotIndex) {
+  return slotIndex * GCD_SECONDS;
+}
+
+function deriveState() {
+  let heat = 0;
+  let battery = 0;
+  let doubleCheckCharges = 3;
+  let checkmateCharges = 3;
+
+  derivedState = plan.map(column => {
+    [column.gcd, ...column.ogcds].filter(Boolean).forEach(actionId => {
+      const action = actionsById[actionId];
+      heat = Math.max(0, Math.min(100, heat + (action.heat || 0)));
+      battery = Math.max(0, Math.min(100, battery + (action.battery || 0)));
+      if (actionId === 'double-check') doubleCheckCharges -= 1;
+      if (actionId === 'checkmate') checkmateCharges -= 1;
+    });
+
+    return {
+      heat,
+      battery,
+      doubleCheckCharges: Math.max(0, doubleCheckCharges),
+      checkmateCharges: Math.max(0, checkmateCharges)
+    };
+  });
+}
+
+function getAvailability(action, slotIndex) {
+  const now = timeOf(slotIndex);
+  const previousUses = [];
+
+  plan.forEach((column, columnIndex) => {
+    [column.gcd, ...column.ogcds].forEach(actionId => {
+      if (actionId === action.id) previousUses.push(timeOf(columnIndex));
+    });
+  });
+
+  if (previousUses.length === 0) return { ok: true };
+
+  const recast = action.recast || GCD_SECONDS;
+  if (action.charges) {
+    const recentUses = previousUses.filter(useTime => now - useTime < recast);
+    return {
+      ok: recentUses.length < action.charges,
+      message: `充能中，约 ${Math.ceil(recast - (now - recentUses[0]))} 秒后可用`
+    };
+  }
+
+  const lastUse = Math.max(...previousUses);
+  return {
+    ok: now - lastUse >= recast,
+    message: `CD中，约 ${Math.ceil(recast - (now - lastUse))} 秒后可用`
+  };
+}
+
+function renderPalette() {
+  const categories = ['职业技能', '职能技能'];
+  elements.palette.innerHTML = categories.map(category => `
+    <section class="skill-category">
+      <h2>${category}</h2>
+      <div class="skill-list">
+        ${actions.filter(action => action.category === category).map(renderPaletteAction).join('')}
+      </div>
+    </section>
+  `).join('');
+
+  document.querySelectorAll('.skill-card').forEach(card => {
+    card.addEventListener('dragstart', event => {
+      event.dataTransfer.setData('text/plain', card.dataset.id);
+    });
+  });
+}
+
+function renderPaletteAction(action) {
+  return `
+    <article class="skill-card ${action.type}" draggable="true" data-id="${action.id}">
+      <img src="${action.icon}" alt="${action.cn}" loading="lazy" onerror="this.src='';this.classList.add('icon-fallback')">
+      <div>
+        <strong>${action.cn}</strong>
+        <span>${action.level}级 · ${action.type === 'gcd' ? '战技' : '能力'}</span>
+      </div>
+      ${renderTooltip(action)}
+    </article>
+  `;
+}
+
+function renderTooltip(action) {
+  const resourceLines = [
+    action.heat ? `${action.heat > 0 ? '热量 +' : '热量 '}${action.heat}` : '',
+    action.battery ? `${action.battery > 0 ? '电量 +' : '电量 '}${action.battery}` : '',
+    action.charges ? `最大档数：${action.charges}` : ''
+  ].filter(Boolean).join('　');
+
+  return `
+    <aside class="skill-tooltip">
+      <div class="tooltip-head">
+        <img src="${action.icon}" alt="">
+        <div><small>${action.en}</small><b>${action.cn}</b><span>${action.type === 'gcd' ? '战技' : '能力'}</span></div>
+      </div>
+      <div class="tooltip-stats">
+        <span>距离${action.range}</span><span>范围${action.radius}</span>
+        <span>咏唱时间<br><b>即时</b></span><span>复唱时间<br><b>${Number(action.recast).toFixed(2)}秒</b></span>
+      </div>
+      <p>对目标发动物理攻击 ${action.potency ? `<em>威力：${action.potency}</em>` : ''}</p>
+      ${resourceLines ? `<p class="resource-line">${resourceLines}</p>` : ''}
+      <p>${action.desc}</p>
+      <p class="requirements"><span>习得条件</span><b>${action.level}级</b><span>适用职业</span><b>机工士</b></p>
+    </aside>
+  `;
+}
+
+function renderTimeline() {
+  deriveState();
+  const lastState = derivedState.at(-1) || { heat: 0, battery: 0, doubleCheckCharges: 3, checkmateCharges: 3 };
+  elements.heatNow.textContent = lastState.heat;
+  elements.heatMeter.value = lastState.heat;
+  elements.batteryNow.textContent = lastState.battery;
+  elements.batteryMeter.value = lastState.battery;
+  elements.doubleNow.textContent = lastState.doubleCheckCharges;
+  elements.checkNow.textContent = lastState.checkmateCharges;
+
+  elements.grid.innerHTML = '';
+  plan.forEach((column, columnIndex) => {
+    const element = document.createElement('div');
+    element.className = 'timeline-column';
+    element.innerHTML = `
+      <div class="time-label">${timeOf(columnIndex)}s</div>
+      <div class="resource-bars">
+        <i class="heat-bar" style="height:${derivedState[columnIndex].heat}%"></i>
+        <i class="battery-bar" style="height:${derivedState[columnIndex].battery}%"></i>
+      </div>
+    `;
+    element.append(createSlot(columnIndex, 'gcd', null, column.gcd));
+    [0, 1, 2].forEach(slotIndex => {
+      element.append(createSlot(columnIndex, 'ogcd', slotIndex, column.ogcds[slotIndex]));
+    });
+    elements.grid.append(element);
+  });
+}
+
+function createSlot(columnIndex, kind, ogcdIndex, actionId) {
+  const slot = document.createElement('div');
+  slot.className = `timeline-slot ${kind === 'gcd' ? 'gcd-slot' : 'ogcd-slot'}`;
+  slot.addEventListener('dragover', event => event.preventDefault());
+  slot.addEventListener('drop', event => handleDrop(event, columnIndex, kind, ogcdIndex));
+
+  if (actionId) {
+    const action = actionsById[actionId];
+    slot.innerHTML = `<img class="placed-icon ${action.recast === 1.5 ? 'short-gcd' : ''}" src="${action.icon}" alt="${action.cn}" title="点击移除 ${action.cn}">`;
+    slot.addEventListener('click', () => {
+      if (kind === 'gcd') plan[columnIndex].gcd = null;
+      else plan[columnIndex].ogcds[ogcdIndex] = null;
+      renderTimeline();
+    });
+  }
+
+  return slot;
+}
+
+function handleDrop(event, columnIndex, kind, ogcdIndex) {
+  event.preventDefault();
+  const action = actionsById[event.dataTransfer.getData('text/plain')];
+  if (!action) return;
+
+  if (action.type !== kind) {
+    showToast(kind === 'gcd' ? '这里只能放战技（GCD）。' : '每个GCD之间最多插入3个能力技能（oGCD）。');
+    return;
+  }
+
+  const availability = getAvailability(action, columnIndex);
+  if (!availability.ok) {
+    showToast(`${action.cn} ${availability.message}，不能放在 ${timeOf(columnIndex).toFixed(1)}s。`);
+    return;
+  }
+
+  const previousState = derivedState[columnIndex - 1] || { heat: 0, battery: 0 };
+  if ((action.heat || 0) < 0 && previousState.heat < Math.abs(action.heat)) {
+    showToast(`${action.cn} 需要 ${Math.abs(action.heat)} 热量。`);
+    return;
+  }
+  if ((action.battery || 0) < 0 && previousState.battery < Math.abs(action.battery)) {
+    showToast(`${action.cn} 需要 ${Math.abs(action.battery)} 电量。`);
+    return;
+  }
+
+  if (kind === 'gcd') plan[columnIndex].gcd = action.id;
+  else plan[columnIndex].ogcds[ogcdIndex] = action.id;
+  showToast(`${action.cn} 已放入 ${timeOf(columnIndex).toFixed(1)}s。`);
+  renderTimeline();
+}
+
+function showToast(message) {
+  elements.toast.textContent = message;
+}
+
+elements.reset.addEventListener('click', () => {
+  plan = createEmptyPlan();
+  showToast('已重置时间轴。');
+  renderTimeline();
+});
+
+renderPalette();
+renderTimeline();

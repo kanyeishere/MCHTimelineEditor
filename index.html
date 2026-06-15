@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>FF14 机工士 PVE 时间轴模拟器</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="hero">
+      <p class="eyebrow">Machinist Timeline Editor</p>
+      <h1>FF14 机工士 PVE 技能时间轴模拟器</h1>
+      <p>技能面板包含机工士职业技能与远敏职能技能；拖动真实技能图标到下方时间轴，悬浮图标可查看详细技能信息。</p>
+    </header>
+
+    <section class="resources" aria-label="机工士资源">
+      <div>🔥 热量 <b id="heatNow">0</b><meter id="heatMeter" min="0" max="100" value="0"></meter></div>
+      <div>🔋 电量 <b id="batteryNow">0</b><meter id="batteryMeter" min="0" max="100" value="0"></meter></div>
+      <div>双将层数 <b id="doubleNow">3</b></div>
+      <div>将死层数 <b id="checkNow">3</b></div>
+      <button id="reset" type="button">↻ 重置</button>
+    </section>
+
+    <section class="skill-panel" aria-label="可拖拽技能图标">
+      <div class="panel-heading">
+        <h2>PvE技能</h2>
+        <p>上方技能图标支持拖拽；鼠标悬浮会显示类似游戏内技能说明的详情卡。</p>
+      </div>
+      <div id="palette" class="palette"></div>
+    </section>
+
+    <div id="toast" class="toast">拖动技能到时间轴：大格放GCD战技，小格放能力技。</div>
+
+    <main class="timeline" aria-label="技能时间轴">
+      <aside class="timeline-labels">
+        <b>Timeline</b>
+        <span>Resources</span>
+        <span>GCD</span>
+        <span>能力技 1</span>
+        <span>能力技 2</span>
+        <span>能力技 3</span>
+      </aside>
+      <div id="grid" class="timeline-grid"></div>
+    </main>
+
+    <footer>
+      横向每列代表一个 2.5s GCD 窗口；短GCD技能以更窄图标显示。若技能仍在CD、充能不足或热量/电量不足，将无法放入该时间点。
+    </footer>
+
+    <script src="app.js"></script>
+  </body>
+</html>
