@@ -3,6 +3,7 @@ const START_TIME_SECONDS = -15;
 const MAX_TIME_SECONDS = 20 * 60;
 const SLOT_COUNT = Math.ceil((MAX_TIME_SECONDS - START_TIME_SECONDS) / DEFAULT_GCD_SECONDS) + 1;
 const ICON_BASE = 'https://ffxiv.gamerescape.com/wiki/Special:Redirect/file/';
+const MAJOR_COOLDOWN_IDS = ['drill', 'air-anchor', 'chain-saw', 'barrel-stabilizer', 'wildfire'];
 
 const actions = [
   { id: 'dexterity-potion', cn: '爆发药水', en: 'Grade 3 Gemdraught of Dexterity', level: 1, type: 'ogcd', category: '职业技能', recast: 270, buffDuration: 30, range: '0米', radius: '0米', desc: '视为能力技。使用后获得30秒爆发药效果，时间轴中处于药效窗口内的本体与机器人技能都会高亮。' },
@@ -190,6 +191,38 @@ function getRobotEventsFromFacts(facts) {
   return events.sort((a, b) => a.time - b.time);
 }
 
+
+function getMajorCooldownEventsFromFacts(facts) {
+  const events = [];
+
+  MAJOR_COOLDOWN_IDS.forEach(actionId => {
+    const action = actionsById[actionId];
+    if (!action) return;
+    events.push({ actionId, time: START_TIME_SECONDS, kind: 'initial' });
+    (facts.useTimesByAction.get(actionId) || []).forEach(useTime => {
+      events.push({ actionId, time: useTime + (action.recast || DEFAULT_GCD_SECONDS), kind: 'ready' });
+    });
+  });
+
+  return events
+    .filter(event => event.time >= START_TIME_SECONDS && event.time <= MAX_TIME_SECONDS)
+    .sort((a, b) => a.time - b.time || MAJOR_COOLDOWN_IDS.indexOf(a.actionId) - MAJOR_COOLDOWN_IDS.indexOf(b.actionId));
+}
+
+function bucketEventsByColumn(events, times) {
+  const buckets = Array.from({ length: plan.length }, () => []);
+  let columnIndex = 0;
+
+  events.forEach(event => {
+    while (columnIndex < times.length - 1 && event.time >= times[columnIndex + 1]) columnIndex += 1;
+    if (event.time >= times[columnIndex] && event.time < (times[columnIndex + 1] ?? Infinity)) {
+      buckets[columnIndex].push(event);
+    }
+  });
+
+  return buckets;
+}
+
 function bucketRobotEventsByColumn(events, times) {
   const buckets = Array.from({ length: plan.length }, () => [[], []]);
   let columnIndex = 0;
@@ -262,6 +295,7 @@ function deriveState(times = getTimelineTimes(), facts = collectTimelineFacts(ti
     return {
       heat,
       battery,
+      reassembleCharges: getAvailableChargesAtWithFacts('reassemble', columnTime, facts),
       doubleCheckCharges: getAvailableChargesAtWithFacts('double-check', columnTime, facts),
       checkmateCharges: getAvailableChargesAtWithFacts('checkmate', columnTime, facts)
     };
@@ -470,8 +504,9 @@ function renderTimeline() {
   const facts = collectTimelineFacts(times);
   const buffWindows = getBuffWindows(times);
   const robotBuckets = bucketRobotEventsByColumn(getRobotEventsFromFacts(facts), times);
+  const majorCooldownBuckets = bucketEventsByColumn(getMajorCooldownEventsFromFacts(facts), times);
   deriveState(times, facts);
-  const lastState = derivedState.at(-1) || { heat: 0, battery: 0, doubleCheckCharges: 3, checkmateCharges: 3 };
+  const lastState = derivedState.at(-1) || { heat: 0, battery: 0, reassembleCharges: 2, doubleCheckCharges: 3, checkmateCharges: 3 };
   if (elements.heatNow) {
     elements.heatNow.textContent = lastState.heat;
     elements.heatNow.title = `当前热量：${lastState.heat} / 100`;
@@ -498,6 +533,8 @@ function renderTimeline() {
     element.className = 'timeline-column';
     element.innerHTML = `
       <div class="time-label">${formatTime(timeOf(columnIndex, times))}</div>
+      ${renderMajorCooldownCell(majorCooldownBuckets[columnIndex])}
+      <div class="charge-row reassemble-row" title="整备层数 ${derivedState[columnIndex].reassembleCharges} / 2"><i style="width:${(derivedState[columnIndex].reassembleCharges / 2) * 100}%"></i></div>
       <div class="charge-row double-row" title="双将层数 ${derivedState[columnIndex].doubleCheckCharges} / 3"><i style="width:${(derivedState[columnIndex].doubleCheckCharges / 3) * 100}%"></i></div>
       <div class="charge-row check-row" title="将死层数 ${derivedState[columnIndex].checkmateCharges} / 3"><i style="width:${(derivedState[columnIndex].checkmateCharges / 3) * 100}%"></i></div>
       <div class="resource-bars" title="热量 ${derivedState[columnIndex].heat} / 100｜电量 ${derivedState[columnIndex].battery} / 100">
@@ -514,6 +551,17 @@ function renderTimeline() {
     fragment.append(element);
   });
   elements.grid.append(fragment);
+}
+
+function renderMajorCooldownCell(events) {
+  const content = events.map(event => {
+    const action = actionsById[event.actionId];
+    const title = event.kind === 'initial'
+      ? `${action.cn} 开场可用`
+      : `${action.cn} 在 ${formatTime(event.time)} 转好`;
+    return `<span class="major-cd-badge ${event.kind}" title="${title}"><img src="${action.icon}" alt="${action.cn}"><small>${formatTime(event.time)}</small></span>`;
+  }).join('');
+  return `<div class="major-cd-row" title="大技能CD提醒：钻头 / 空气锚 / 回转飞锯 / 枪管加热 / 野火">${content}</div>`;
 }
 
 function createSlot(columnIndex, kind, ogcdIndex, actionId, disabled = false, releaseTime = timeOf(columnIndex), buffWindows = []) {
