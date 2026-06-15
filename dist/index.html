@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>FF14 机工士 PVE 时间轴模拟器</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">Machinist Timeline Editor</p>
+        <h1>FF14 机工士 PVE 技能时间轴模拟器</h1>
+        <p>技能面板包含机工士职业技能与远敏职能技能；拖动真实技能图标到下方时间轴，悬浮图标可查看详细技能信息。</p>
+      </div>
+      <div class="hero-actions">
+        <button id="exportPlan" type="button">⇩ 导出</button>
+        <label class="import-button" for="importPlan">⇧ 导入</label>
+        <input id="importPlan" type="file" accept="application/json,.json">
+        <button id="reset" type="button">↻ 重置</button>
+      </div>
+    </header>
+
+    <section class="skill-panel" aria-label="可拖拽技能图标">
+      <div class="panel-heading">
+        <h2>PvE技能</h2>
+        <p>上方技能图标支持拖拽或点击添加；鼠标悬浮会显示类似游戏内技能说明的详情卡。</p>
+        <div class="quick-adds">
+          <button id="addBasicCombo" type="button">+ 基础连</button>
+          <button id="addOverheatCombo" type="button">+ 过热连</button>
+          <button id="addTransitionGap" type="button">+ 转场空白</button>
+        </div>
+      </div>
+      <div id="palette" class="palette"></div>
+    </section>
+
+    <div id="toast" class="toast">拖动技能到时间轴：大格放GCD战技，小格放能力技。</div>
+
+    <main class="timeline" aria-label="技能时间轴">
+      <aside class="timeline-labels">
+        <b>Timeline</b>
+        <span>主要CD</span>
+        <span>Buff</span>
+        <span>Reassemble</span>
+        <span>Double Check</span>
+        <span>Checkmate</span>
+        <span>Heat / Battery</span>
+        <span>GCD</span>
+        <span>能力技 1</span>
+        <span>能力技 2</span>
+        <span>能力技 3</span>
+        <span>机器人</span>
+        <span>机器人</span>
+      </aside>
+      <div id="grid" class="timeline-grid"></div>
+    </main>
+
+    <footer>
+      时间轴从 -15s 开始，最长 20 分钟；战技复唱时间只限制同技能再次释放，GCD时长才会推进下一个战技时间（通常2.5s，热冲击/烈焰弹为1.5s）；能力技按 +0.6s、+1.2s、+1.8s 顺序显示，爆发药水30秒内的本体与机器人技能会高亮；战斗前倒计时 [-15s, 0s) 的GCD格也允许放置能力技；可拖动时间轴上的技能到新位置；鼠标滚轮在时间轴上会横向滚动；可在当前GCD结束后插入可命名的Boss上天/转场空白列，后续GCD会在空白结束后立刻开始；可使用导出/导入保存或分享排轴。
+    </footer>
+
+    <script src="app.js"></script>
+  </body>
+</html>
