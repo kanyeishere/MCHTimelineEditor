@@ -61,7 +61,7 @@ const actions = [
   { id: 'arms-length', hidden: true, cn: '亲疏自行', en: "Arm's Length", level: 32, type: 'ogcd', category: '职能技能', recast: 120, range: '0米', radius: '0米', desc: '令自身免疫大多数击退与吸引效果。' }
 ].map(action => ({
   ...action,
-  icon: `${ICON_BASE}${action.id}.svg`,
+  icon: `${ICON_BASE}${action.id}.png`,
   gcdDuration: action.type === 'gcd' ? (action.recast === 1.5 ? 1.5 : 2.5) : 0
 }));
 
