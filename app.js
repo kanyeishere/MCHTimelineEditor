@@ -1,5 +1,7 @@
-const GCD_SECONDS = 2.5;
-const SLOT_COUNT = 36;
+const DEFAULT_GCD_SECONDS = 2.5;
+const START_TIME_SECONDS = -15;
+const MAX_TIME_SECONDS = 20 * 60;
+const SLOT_COUNT = Math.ceil((MAX_TIME_SECONDS - START_TIME_SECONDS) / DEFAULT_GCD_SECONDS) + 1;
 const ICON_BASE = 'https://ffxiv.gamerescape.com/wiki/Special:Redirect/file/';
 
 const actions = [
@@ -11,7 +13,7 @@ const actions = [
   { id: 'spread-shot', cn: '散射', en: 'Spread Shot', level: 18, type: 'gcd', category: '职业技能', recast: 2.5, range: '12米', radius: '12米', potency: 110, heat: 5, desc: '向目标方向发动扇形范围攻击。追加效果：热量 +5。' },
   { id: 'clean-shot', cn: '狙击弹', en: 'Clean Shot', level: 26, type: 'gcd', category: '职业技能', recast: 2.5, range: '25米', radius: '0米', potency: 100, heat: 5, battery: 10, desc: '连击：独头弹/热独头弹。连击成功时热量 +5、电量 +10。' },
   { id: 'hypercharge', cn: '超荷', en: 'Hypercharge', level: 30, type: 'ogcd', category: '职业技能', recast: 10, heat: -50, range: '0米', radius: '0米', desc: '消耗50热量，获得5档过热，可执行烈焰弹/自动弩。' },
-  { id: 'heat-blast', cn: '热冲击', en: 'Heat Blast', level: 35, type: 'gcd', category: '职业技能', recast: 1.5, range: '25米', radius: '0米', potency: 200, desc: '过热时可用；缩短虹吸弹与弹射的复唱时间。' },
+  { id: 'heat-blast', cn: '热冲击', en: 'Heat Blast', level: 35, type: 'gcd', category: '职业技能', recast: 1.5, range: '25米', radius: '0米', potency: 200, desc: '过热时可用；追加效果：虹吸弹和弹射的复唱时间缩短15秒。' },
   { id: 'rook-autoturret', cn: '车式浮空炮塔', en: 'Rook Autoturret', level: 40, type: 'ogcd', category: '职业技能', recast: 6, battery: -50, range: '0米', radius: '0米', desc: '消耗50电量部署单体炮塔；与后式自走人偶共享用途。' },
   { id: 'rook-overdrive', cn: '超档车式炮塔', en: 'Rook Overdrive', level: 40, type: 'ogcd', category: '职业技能', recast: 15, range: '25米', radius: '0米', desc: '命令车式浮空炮塔执行超负荷。' },
   { id: 'wildfire', cn: '野火', en: 'Wildfire', level: 45, type: 'ogcd', category: '职业技能', recast: 120, range: '25米', radius: '0米', desc: '附加野火；持续结束或起爆时根据期间命中的战技次数造成伤害。' },
@@ -20,19 +22,19 @@ const actions = [
   { id: 'auto-crossbow', cn: '自动弩', en: 'Auto Crossbow', level: 52, type: 'gcd', category: '职业技能', recast: 1.5, range: '12米', radius: '12米', potency: 140, desc: '过热时可用的扇形范围战技。' },
   { id: 'heated-split-shot', cn: '热分裂弹', en: 'Heated Split Shot', level: 54, type: 'gcd', category: '职业技能', recast: 2.5, range: '25米', radius: '0米', potency: 220, heat: 5, desc: '分裂弹的强化版。追加效果：热量 +5。' },
   { id: 'tactician', cn: '策动', en: 'Tactician', level: 56, type: 'ogcd', category: '职业技能', recast: 90, range: '0米', radius: '30米', desc: '降低自身与周围队员受到的伤害。' },
-  { id: 'drill', cn: '钻头', en: 'Drill', level: 58, type: 'gcd', category: '职业技能', recast: 20, range: '25米', radius: '0米', potency: 660, desc: '强力单体战技；拥有独立复唱时间。' },
+  { id: 'drill', cn: '钻头', en: 'Drill', level: 58, type: 'gcd', category: '职业技能', recast: 20, charges: 2, range: '25米', radius: '0米', potency: 660, desc: '强力单体战技；拥有独立复唱时间。最大档数：2。' },
   { id: 'heated-slug-shot', cn: '热独头弹', en: 'Heated Slug Shot', level: 60, type: 'gcd', category: '职业技能', recast: 2.5, range: '25米', radius: '0米', potency: 140, heat: 5, desc: '独头弹的强化版；连击成功时提高威力并增加热量。' },
   { id: 'dismantle', cn: '武装解除', en: 'Dismantle', level: 62, type: 'ogcd', category: '职业技能', recast: 120, range: '25米', radius: '0米', desc: '降低目标造成的伤害。' },
   { id: 'heated-clean-shot', cn: '热狙击弹', en: 'Heated Clean Shot', level: 64, type: 'gcd', category: '职业技能', recast: 2.5, range: '25米', radius: '0米', potency: 160, heat: 5, battery: 10, desc: '狙击弹的强化版；连击成功时热量 +5、电量 +10。' },
   { id: 'barrel-stabilizer', cn: '枪管加热', en: 'Barrel Stabilizer', level: 66, type: 'ogcd', category: '职业技能', recast: 120, heat: 50, range: '0米', radius: '0米', desc: '增加热量50。' },
-  { id: 'blazing-shot', cn: '烈焰弹', en: 'Blazing Shot', level: 68, type: 'gcd', category: '职业技能', recast: 1.5, range: '25米', radius: '0米', potency: 220, desc: '热冲击的强化版；过热时可用，复唱1.5秒。' },
+  { id: 'blazing-shot', cn: '烈焰弹', en: 'Blazing Shot', level: 68, type: 'gcd', category: '职业技能', recast: 1.5, range: '25米', radius: '0米', potency: 220, desc: '热冲击的强化版；过热时可用，复唱1.5秒。追加效果：双将和将死的复唱时间缩短15秒。' },
   { id: 'flamethrower', cn: '火焰喷射器', en: 'Flamethrower', level: 70, type: 'ogcd', category: '职业技能', recast: 60, range: '0米', radius: '8米', desc: '持续向前方范围喷射火焰。移动或转身会取消。' },
   { id: 'bioblaster', cn: '毒菌冲击', en: 'Bioblaster', level: 72, type: 'gcd', category: '职业技能', recast: 20, range: '12米', radius: '12米', potency: 50, desc: '范围战技并附加持续伤害；与钻头共享用途场景。' },
   { id: 'air-anchor', cn: '空气锚', en: 'Air Anchor', level: 76, type: 'gcd', category: '职业技能', recast: 40, range: '25米', radius: '0米', potency: 660, battery: 20, desc: '热弹的强化版；不与其他战技共享复唱。追加效果：电量 +20。' },
-  { id: 'automaton-queen', cn: '后式自走人偶', en: 'Automaton Queen', level: 80, type: 'ogcd', category: '职业技能', recast: 6, battery: -50, range: '0米', radius: '0米', desc: '消耗50电量召唤后式自走人偶进行攻击。' },
-  { id: 'pile-bunker', cn: '打桩枪', en: 'Pile Bunker', level: 80, type: 'ogcd', category: '职业技能', recast: 1, range: '3米', radius: '0米', potency: 680, desc: '后式自走人偶的强力单体攻击。' },
+  { id: 'automaton-queen', cn: '后式自走人偶', en: 'Automaton Queen', level: 80, type: 'ogcd', category: '职业技能', recast: 6, batteryCostMin: 50, drainBattery: true, range: '0米', radius: '0米', desc: '电量50以上发动，召唤后会耗尽当前全部电量。4.5秒后开始机器人连段。' },
+  { id: 'pile-bunker', cn: '铁臂拳', en: 'Pile Bunker', level: 80, type: 'robot', category: '机器人', recast: 1.5, range: '3米', radius: '0米', potency: 680, desc: '后式自走人偶自动执行的攻击。' },
   { id: 'roller-dash', cn: '滚轮冲', en: 'Roller Dash', level: 80, type: 'ogcd', category: '职业技能', recast: 3, range: '0米', radius: '0米', desc: '后式自走人偶突进到目标附近。' },
-  { id: 'crowned-collider', cn: '王室对撞机', en: 'Crowned Collider', level: 86, type: 'ogcd', category: '职业技能', recast: 1, range: '3米', radius: '0米', potency: 780, desc: '后式自走人偶的终结攻击。' },
+  { id: 'crowned-collider', cn: '王室对撞机', en: 'Crowned Collider', level: 86, type: 'robot', category: '机器人', recast: 1, range: '3米', radius: '0米', potency: 780, desc: '后式自走人偶自动执行的终结攻击。' },
   { id: 'chain-saw', cn: '回转飞锯', en: 'Chain Saw', level: 90, type: 'gcd', category: '职业技能', recast: 60, range: '25米', radius: '25米直线', potency: 660, battery: 20, desc: '直线范围战技；追加效果：电量 +20。' },
   { id: 'double-check', cn: '双将', en: 'Double Check', level: 92, type: 'ogcd', category: '职业技能', recast: 1, charges: 3, range: '25米', radius: '0米', potency: 160, desc: '虹吸弹的强化版。最大档数：3。' },
   { id: 'checkmate', cn: '将死', en: 'Checkmate', level: 92, type: 'ogcd', category: '职业技能', recast: 1, charges: 3, range: '25米', radius: '5米', potency: 160, desc: '弹射的强化版。最大档数：3。' },
@@ -70,11 +72,37 @@ function createEmptyPlan() {
   return Array.from({ length: SLOT_COUNT }, () => ({ gcd: null, ogcds: [null, null, null] }));
 }
 
-function timeOf(slotIndex) {
-  return slotIndex * GCD_SECONDS;
+function getColumnRecast(column) {
+  const action = actionsById[column.gcd];
+  return action?.recast || DEFAULT_GCD_SECONDS;
 }
 
-function deriveState() {
+function getTimelineTimes() {
+  const times = [];
+  let current = START_TIME_SECONDS;
+
+  for (let index = 0; index < plan.length; index += 1) {
+    times[index] = current;
+    current += getColumnRecast(plan[index]);
+  }
+
+  return times;
+}
+
+function timeOf(slotIndex, times = getTimelineTimes()) {
+  return times[slotIndex] ?? START_TIME_SECONDS;
+}
+
+function formatTime(seconds) {
+  return `${Number(seconds.toFixed(1))}s`;
+}
+
+function maxOgcdSlotsFor(column) {
+  const action = actionsById[column.gcd];
+  return action?.recast === 1.5 ? 2 : 3;
+}
+
+function deriveState(times = getTimelineTimes()) {
   let heat = 0;
   let battery = 0;
   let doubleCheckCharges = 3;
@@ -84,7 +112,8 @@ function deriveState() {
     [column.gcd, ...column.ogcds].filter(Boolean).forEach(actionId => {
       const action = actionsById[actionId];
       heat = Math.max(0, Math.min(100, heat + (action.heat || 0)));
-      battery = Math.max(0, Math.min(100, battery + (action.battery || 0)));
+      if (action.drainBattery) battery = 0;
+      else battery = Math.max(0, Math.min(100, battery + (action.battery || 0)));
       if (actionId === 'double-check') doubleCheckCharges -= 1;
       if (actionId === 'checkmate') checkmateCharges -= 1;
     });
@@ -98,31 +127,51 @@ function deriveState() {
   });
 }
 
-function getAvailability(action, slotIndex) {
-  const now = timeOf(slotIndex);
+function getRecastReduction(actionId, useTime, targetTime) {
+  let reduction = 0;
+
+  plan.forEach((column, columnIndex) => {
+    const time = timeOf(columnIndex);
+    if (time <= useTime || time > targetTime) return;
+    if (actionId === 'gauss-round' || actionId === 'ricochet') {
+      if (column.gcd === 'heat-blast') reduction += 15;
+    }
+    if (actionId === 'double-check' || actionId === 'checkmate') {
+      if (column.gcd === 'blazing-shot') reduction += 15;
+    }
+  });
+
+  return reduction;
+}
+
+function getAvailability(action, slotIndex, times = getTimelineTimes()) {
+  const now = timeOf(slotIndex, times);
   const previousUses = [];
 
   plan.forEach((column, columnIndex) => {
     [column.gcd, ...column.ogcds].forEach(actionId => {
-      if (actionId === action.id) previousUses.push(timeOf(columnIndex));
+      if (actionId === action.id) previousUses.push(timeOf(columnIndex, times));
     });
   });
 
   if (previousUses.length === 0) return { ok: true };
 
-  const recast = action.recast || GCD_SECONDS;
+  const recast = action.recast || DEFAULT_GCD_SECONDS;
   if (action.charges) {
-    const recentUses = previousUses.filter(useTime => now - useTime < recast);
+    const recentUses = previousUses.filter(useTime => now - useTime < Math.max(0, recast - getRecastReduction(action.id, useTime, now)));
+    const firstBlockedUse = recentUses[0];
+    const remaining = firstBlockedUse === undefined ? 0 : Math.max(0, recast - getRecastReduction(action.id, firstBlockedUse, now) - (now - firstBlockedUse));
     return {
       ok: recentUses.length < action.charges,
-      message: `充能中，约 ${Math.ceil(recast - (now - recentUses[0]))} 秒后可用`
+      message: `充能中，约 ${Math.ceil(remaining)} 秒后可用`
     };
   }
 
   const lastUse = Math.max(...previousUses);
+  const effectiveRecast = Math.max(0, recast - getRecastReduction(action.id, lastUse, now));
   return {
-    ok: now - lastUse >= recast,
-    message: `CD中，约 ${Math.ceil(recast - (now - lastUse))} 秒后可用`
+    ok: now - lastUse >= effectiveRecast,
+    message: `CD中，约 ${Math.ceil(effectiveRecast - (now - lastUse))} 秒后可用`
   };
 }
 
@@ -160,6 +209,7 @@ function renderPaletteAction(action) {
 function renderTooltip(action) {
   const resourceLines = [
     action.heat ? `${action.heat > 0 ? '热量 +' : '热量 '}${action.heat}` : '',
+    action.drainBattery ? '消耗：全部电量（最低50）' : '',
     action.battery ? `${action.battery > 0 ? '电量 +' : '电量 '}${action.battery}` : '',
     action.charges ? `最大档数：${action.charges}` : ''
   ].filter(Boolean).join('　');
@@ -183,7 +233,8 @@ function renderTooltip(action) {
 }
 
 function renderTimeline() {
-  deriveState();
+  const times = getTimelineTimes();
+  deriveState(times);
   const lastState = derivedState.at(-1) || { heat: 0, battery: 0, doubleCheckCharges: 3, checkmateCharges: 3 };
   elements.heatNow.textContent = lastState.heat;
   elements.heatMeter.value = lastState.heat;
@@ -197,29 +248,32 @@ function renderTimeline() {
     const element = document.createElement('div');
     element.className = 'timeline-column';
     element.innerHTML = `
-      <div class="time-label">${timeOf(columnIndex)}s</div>
+      <div class="time-label">${formatTime(timeOf(columnIndex, times))}</div>
       <div class="resource-bars">
         <i class="heat-bar" style="height:${derivedState[columnIndex].heat}%"></i>
         <i class="battery-bar" style="height:${derivedState[columnIndex].battery}%"></i>
       </div>
     `;
-    element.append(createSlot(columnIndex, 'gcd', null, column.gcd));
+    element.append(createSlot(columnIndex, 'gcd', null, column.gcd, false, timeOf(columnIndex, times)));
     [0, 1, 2].forEach(slotIndex => {
-      element.append(createSlot(columnIndex, 'ogcd', slotIndex, column.ogcds[slotIndex]));
+      element.append(createSlot(columnIndex, 'ogcd', slotIndex, column.ogcds[slotIndex], slotIndex >= maxOgcdSlotsFor(column), timeOf(columnIndex, times) + ((slotIndex + 1) * 0.6)));
     });
+    element.append(createRobotSlot(columnIndex, times));
     elements.grid.append(element);
   });
 }
 
-function createSlot(columnIndex, kind, ogcdIndex, actionId) {
+function createSlot(columnIndex, kind, ogcdIndex, actionId, disabled = false, releaseTime = timeOf(columnIndex)) {
   const slot = document.createElement('div');
-  slot.className = `timeline-slot ${kind === 'gcd' ? 'gcd-slot' : 'ogcd-slot'}`;
-  slot.addEventListener('dragover', event => event.preventDefault());
-  slot.addEventListener('drop', event => handleDrop(event, columnIndex, kind, ogcdIndex));
+  slot.className = `timeline-slot ${kind === 'gcd' ? 'gcd-slot' : 'ogcd-slot'} ${disabled ? 'disabled-slot' : ''}`;
+  if (!disabled) {
+    slot.addEventListener('dragover', event => event.preventDefault());
+    slot.addEventListener('drop', event => handleDrop(event, columnIndex, kind, ogcdIndex));
+  }
 
   if (actionId) {
     const action = actionsById[actionId];
-    slot.innerHTML = `<img class="placed-icon ${action.recast === 1.5 ? 'short-gcd' : ''}" src="${action.icon}" alt="${action.cn}" title="点击移除 ${action.cn}">`;
+    slot.innerHTML = `<span class="placed-action"><small>${formatTime(releaseTime)}</small><img class="placed-icon ${action.recast === 1.5 ? 'short-gcd' : ''}" src="${action.icon}" alt="${action.cn}" title="点击移除 ${action.cn}"></span>`;
     slot.addEventListener('click', () => {
       if (kind === 'gcd') plan[columnIndex].gcd = null;
       else plan[columnIndex].ogcds[ogcdIndex] = null;
@@ -230,19 +284,55 @@ function createSlot(columnIndex, kind, ogcdIndex, actionId) {
   return slot;
 }
 
+function getRobotEvents(times = getTimelineTimes()) {
+  const events = [];
+  plan.forEach((column, columnIndex) => {
+    if (column.ogcds.includes('automaton-queen')) {
+      const queenTime = timeOf(columnIndex, times) + ((column.ogcds.indexOf('automaton-queen') + 1) * 0.6);
+      [0, 1, 2, 3].forEach(index => events.push({ actionId: 'pile-bunker', time: queenTime + 4.5 + (index * 1.5) }));
+      events.push({ actionId: 'crowned-collider', time: queenTime + 10.5 });
+    }
+  });
+  return events;
+}
+
+function createRobotSlot(columnIndex, times) {
+  const slot = document.createElement('div');
+  slot.className = 'timeline-slot robot-slot';
+  const start = timeOf(columnIndex, times);
+  const end = timeOf(columnIndex + 1, times);
+  const events = getRobotEvents(times).filter(event => event.time >= start && event.time < end);
+  slot.innerHTML = events.map(event => {
+    const action = actionsById[event.actionId];
+    return `<span class="placed-action robot-action"><small>${formatTime(event.time)}</small><img class="placed-icon" src="${action.icon}" alt="${action.cn}" title="${action.cn} ${formatTime(event.time)}"></span>`;
+  }).join('');
+  return slot;
+}
+
 function handleDrop(event, columnIndex, kind, ogcdIndex) {
   event.preventDefault();
+  const times = getTimelineTimes();
   const action = actionsById[event.dataTransfer.getData('text/plain')];
   if (!action) return;
+
+  if (action.type === 'robot') {
+    showToast('机器人技能由后式自走人偶自动生成，不能手动放置。');
+    return;
+  }
 
   if (action.type !== kind) {
     showToast(kind === 'gcd' ? '这里只能放战技（GCD）。' : '每个GCD之间最多插入3个能力技能（oGCD）。');
     return;
   }
 
-  const availability = getAvailability(action, columnIndex);
+  if (kind === 'ogcd' && ogcdIndex >= maxOgcdSlotsFor(plan[columnIndex])) {
+    showToast('1.5秒短GCD后只能插入2个能力技能。');
+    return;
+  }
+
+  const availability = getAvailability(action, columnIndex, times);
   if (!availability.ok) {
-    showToast(`${action.cn} ${availability.message}，不能放在 ${timeOf(columnIndex).toFixed(1)}s。`);
+    showToast(`${action.cn} ${availability.message}，不能放在 ${formatTime(timeOf(columnIndex, times))}。`);
     return;
   }
 
@@ -251,14 +341,22 @@ function handleDrop(event, columnIndex, kind, ogcdIndex) {
     showToast(`${action.cn} 需要 ${Math.abs(action.heat)} 热量。`);
     return;
   }
+  if (action.batteryCostMin && previousState.battery < action.batteryCostMin) {
+    showToast(`${action.cn} 至少需要 ${action.batteryCostMin} 电量，发动后会耗尽全部电量。`);
+    return;
+  }
   if ((action.battery || 0) < 0 && previousState.battery < Math.abs(action.battery)) {
     showToast(`${action.cn} 需要 ${Math.abs(action.battery)} 电量。`);
     return;
   }
 
-  if (kind === 'gcd') plan[columnIndex].gcd = action.id;
-  else plan[columnIndex].ogcds[ogcdIndex] = action.id;
-  showToast(`${action.cn} 已放入 ${timeOf(columnIndex).toFixed(1)}s。`);
+  if (kind === 'gcd') {
+    plan[columnIndex].gcd = action.id;
+    if (action.recast === 1.5) plan[columnIndex].ogcds[2] = null;
+  } else {
+    plan[columnIndex].ogcds[ogcdIndex] = action.id;
+  }
+  showToast(`${action.cn} 已放入 ${formatTime(timeOf(columnIndex, times))}。`);
   renderTimeline();
 }
 

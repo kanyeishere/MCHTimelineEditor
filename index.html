@@ -39,12 +39,13 @@
         <span>能力技 1</span>
         <span>能力技 2</span>
         <span>能力技 3</span>
+        <span>机器人</span>
       </aside>
       <div id="grid" class="timeline-grid"></div>
     </main>
 
     <footer>
-      横向每列代表一个 2.5s GCD 窗口；短GCD技能以更窄图标显示。若技能仍在CD、充能不足或热量/电量不足，将无法放入该时间点。
+      时间轴从 -15s 开始，最长 20 分钟；普通空列按 2.5s 前进，热冲击/烈焰弹等 1.5s GCD 会让后续时间点同步前移，且短GCD后只能插入2个能力技；能力技按 +0.6s、+1.2s、+1.8s 顺序显示，后式自走人偶会自动生成机器人技能行。
     </footer>
 
     <script src="app.js"></script>

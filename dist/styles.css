@@ -104,10 +104,10 @@ p { margin: 0; }
 
 .toast { margin: 14px 36px; padding: 10px 14px; color: #302300; background: #f2d675; border: 1px solid #ac8532; border-radius: 8px; }
 .timeline { display: flex; margin: 0 36px 24px; overflow: auto; background: #f8f8f8; color: #101010; border: 1px solid #b7b7b7; box-shadow: 0 14px 28px #0008; }
-.timeline-labels { position: sticky; left: 0; z-index: 10; display: grid; grid-template-rows: 28px 88px 60px 45px 45px 45px; min-width: 145px; background: #f3f3f3; border-right: 1px solid #b8b8b8; }
+.timeline-labels { position: sticky; left: 0; z-index: 10; display: grid; grid-template-rows: 28px 88px 60px 45px 45px 45px 48px; min-width: 145px; background: #f3f3f3; border-right: 1px solid #b8b8b8; }
 .timeline-labels > * { padding: 7px; border-bottom: 1px solid #c8c8c8; }
 .timeline-grid { display: flex; min-width: max-content; }
-.timeline-column { width: 66px; display: grid; grid-template-rows: 28px 88px 60px 45px 45px 45px; border-right: 1px solid #d0d0d0; }
+.timeline-column { width: 66px; display: grid; grid-template-rows: 28px 88px 60px 45px 45px 45px 48px; border-right: 1px solid #d0d0d0; }
 .timeline-column:nth-child(2n) { background: #eef3ff; }
 .time-label { padding: 6px; font-size: 12px; border-bottom: 1px solid #c8c8c8; }
 .resource-bars { position: relative; background: linear-gradient(#fdfdfd, #edf7ff); border-bottom: 1px solid #c8c8c8; }
@@ -117,8 +117,15 @@ p { margin: 0; }
 .timeline-slot { display: grid; place-items: center; min-height: 38px; border-bottom: 1px solid #c8c8c8; background: #fff; }
 .gcd-slot { background: #e9eef9; }
 .timeline-slot:empty::after { content: '+'; color: #a5a5a5; }
+.disabled-slot { background: #ececec; cursor: not-allowed; }
+.disabled-slot:empty::after { content: '短GCD'; font-size: 11px; color: #b4b4b4; }
 .timeline-slot:hover { outline: 2px solid #3aa0ff; outline-offset: -2px; }
+.placed-action { display: grid; place-items: center; gap: 1px; }
+.placed-action small { color: #31528f; font-size: 10px; line-height: 1; }
 .placed-icon { cursor: pointer; }
+.robot-slot { background: #fff8e8; }
+.robot-slot:empty::after { content: ""; }
+.robot-action .placed-icon { border-color: #c3912e; }
 .gcd-slot .placed-icon { width: 46px; height: 46px; }
 .placed-icon.short-gcd { width: 32px; border-radius: 14px; }
 footer { margin: 0 36px 30px; color: #c7bea5; font-size: 13px; }
