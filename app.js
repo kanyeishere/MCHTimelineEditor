@@ -2,6 +2,7 @@ const DEFAULT_GCD_SECONDS = 2.5;
 const START_TIME_SECONDS = -15;
 const INITIAL_MAX_TIME_SECONDS = 20 * 60;
 const TIMELINE_TAIL_SECONDS = 240;
+const TIME_EPSILON = 1e-6;
 const INITIAL_SLOT_COUNT = Math.ceil((INITIAL_MAX_TIME_SECONDS - START_TIME_SECONDS) / DEFAULT_GCD_SECONDS) + 1;
 const ICON_BASE = 'https://ffxiv.gamerescape.com/wiki/Special:Redirect/file/';
 const MAJOR_COOLDOWN_IDS = ['drill', 'air-anchor', 'chain-saw', 'barrel-stabilizer', 'wildfire', 'dexterity-potion'];
@@ -311,15 +312,21 @@ function simulateChargeState(actionId, atTime, useTimes, facts) {
   let blockedUseTime = null;
 
   const recoverUntil = (limitTime, includeEqual = true) => {
-    while (recoveryQueue.length && (includeEqual ? recoveryQueue[0] <= limitTime : recoveryQueue[0] < limitTime)) {
+    while (recoveryQueue.length && (includeEqual ? recoveryQueue[0] <= limitTime + TIME_EPSILON : recoveryQueue[0] < limitTime - TIME_EPSILON)) {
       recoveryEvents.push(recoveryQueue.shift());
     }
   };
 
   useTimes.filter(useTime => useTime <= atTime).sort((a, b) => a - b).forEach(useTime => {
-    // 已经放在时间轴上的同一时刻使用与充能恢复，要先结算使用再结算恢复。
-    // 这样旧版导入轴里“钻头在恢复点同一列再次使用”时，不会把正在排队的下一次恢复吞掉。
+    // 同一时刻使用会先消耗已有层数，再处理该时刻恢复；如果正好踩在恢复点，
+    // 该恢复会被本次使用吃掉并顺延到下一轮，避免旧轴导入时把同一时间点错误算成额外层数。
     recoverUntil(useTime, false);
+    if (recoveryQueue.length && Math.abs(recoveryQueue[0] - useTime) <= TIME_EPSILON) {
+      const consumedRecoveryTime = recoveryQueue.shift();
+      const delayedRecoveryTime = getChargeRecoveryTime(actionId, consumedRecoveryTime, facts);
+      recoveryQueue.unshift(delayedRecoveryTime);
+    }
+
     const availableCharges = maxCharges - recoveryQueue.length;
     if (availableCharges <= 0) {
       blockedUseTime ??= useTime;
@@ -672,28 +679,10 @@ function getAvailability(action, slotIndex, times = getTimelineTimes(), options 
     const facts = collectTimelineFacts(times);
     const existingUseTimes = useEvents.map(use => use.time);
     const beforeCandidate = simulateChargeState(action.id, now, existingUseTimes, facts);
+
     if (beforeCandidate.charges <= 0) {
       const remaining = beforeCandidate.nextRecoveryTime === null ? action.recast : Math.max(0, beforeCandidate.nextRecoveryTime - now);
       return { ok: false, message: `充能中，约 ${Math.ceil(remaining)} 秒后可用` };
-    }
-
-    let charges = beforeCandidate.charges - 1;
-    let nextRecoveryTime = beforeCandidate.nextRecoveryTime;
-    if (nextRecoveryTime === null) nextRecoveryTime = getChargeRecoveryTime(action.id, now, facts);
-    const recoverUntil = limitTime => {
-      while (nextRecoveryTime !== null && nextRecoveryTime <= limitTime) {
-        charges = Math.min(action.charges, charges + 1);
-        if (charges >= action.charges) nextRecoveryTime = null;
-        else nextRecoveryTime = getChargeRecoveryTime(action.id, nextRecoveryTime, facts);
-      }
-    };
-
-    const futureUseTimes = existingUseTimes.filter(useTime => useTime > now).sort((a, b) => a - b);
-    for (const futureUseTime of futureUseTimes) {
-      recoverUntil(futureUseTime);
-      if (charges <= 0) return { ok: false, message: `会导致后续 ${formatTime(futureUseTime)} 的${action.cn}充能不足` };
-      charges -= 1;
-      if (nextRecoveryTime === null) nextRecoveryTime = getChargeRecoveryTime(action.id, futureUseTime, facts);
     }
 
     return { ok: true };
