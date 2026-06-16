@@ -379,9 +379,14 @@ function getMajorCooldownEventsFromFacts(facts) {
     const action = actionsById[actionId];
     if (!action) return;
     events.push({ actionId, time: START_TIME_SECONDS, kind: 'initial' });
-    const readyTimes = action.charges
-      ? getChargeRecoveryEventsFromFacts(actionId, facts)
-      : (facts.useTimesByAction.get(actionId) || []).map(useTime => useTime + (action.recast || DEFAULT_GCD_SECONDS));
+
+    if (action.charges) {
+      getChargeRecoveryEventsFromFacts(actionId, facts)
+        .forEach(time => events.push({ actionId, time, kind: 'ready' }));
+      return;
+    }
+
+    const readyTimes = (facts.useTimesByAction.get(actionId) || []).map(useTime => useTime + (action.recast || DEFAULT_GCD_SECONDS));
     readyTimes.forEach(time => events.push({ actionId, time, kind: 'ready' }));
   });
 
@@ -888,8 +893,11 @@ function renderMajorCooldownCell(events) {
     const action = actionsById[event.actionId];
     const title = event.kind === 'initial'
       ? `${action.cn} 开场可用`
-      : `${action.cn} 在 ${formatTime(event.time)} 转好`;
-    return `<span class="major-cd-badge ${event.kind}" data-action-id="${event.actionId}" title="${title}"><img src="${action.icon}" alt="${action.cn}"><small>${formatTime(event.time)}</small></span>`;
+      : event.kind === 'charge'
+        ? `${action.cn} 当前 ${event.charges} / ${action.charges} 层，可用`
+        : `${action.cn} 在 ${formatTime(event.time)} 转好`;
+    const label = event.kind === 'charge' ? `${event.chargeIndex + 1}/${action.charges}` : formatTime(event.time);
+    return `<span class="major-cd-badge ${event.kind}" data-action-id="${event.actionId}" title="${title}"><img src="${action.icon}" alt="${action.cn}"><small>${label}</small></span>`;
   }).join('');
   return `<div class="major-cd-row" title="大技能CD提醒：钻头 / 空气锚 / 回转飞锯 / 枪管加热 / 野火 / 爆发药水">${content}</div>`;
 }
