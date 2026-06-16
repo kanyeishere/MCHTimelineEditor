@@ -693,16 +693,10 @@ function getAvailability(action, slotIndex, times = getTimelineTimes(), options 
     const facts = collectTimelineFacts(times);
     const existingUseTimes = useEvents.map(use => use.time);
     const beforeCandidate = simulateChargeState(action.id, now, existingUseTimes, facts);
-    const candidateUseTimes = [...existingUseTimes, now].sort((a, b) => a - b);
-    const afterCandidate = simulateChargeState(action.id, getSimulationEndTime(), candidateUseTimes, facts);
 
-    if (afterCandidate.blockedUseTime !== null) {
-      if (Math.abs(afterCandidate.blockedUseTime - now) <= TIME_EPSILON) {
-        const remaining = beforeCandidate.nextRecoveryTime === null ? action.recast : Math.max(0, beforeCandidate.nextRecoveryTime - now);
-        return { ok: false, message: `充能中，约 ${Math.ceil(remaining)} 秒后可用` };
-      }
-
-      return { ok: false, message: `会导致后续 ${formatTime(afterCandidate.blockedUseTime)} 的${action.cn}充能不足` };
+    if (beforeCandidate.charges <= 0) {
+      const remaining = beforeCandidate.nextRecoveryTime === null ? action.recast : Math.max(0, beforeCandidate.nextRecoveryTime - now);
+      return { ok: false, message: `充能中，约 ${Math.ceil(remaining)} 秒后可用` };
     }
 
     return { ok: true };
