@@ -378,8 +378,14 @@ function getMajorCooldownEventsFromFacts(facts) {
   MAJOR_COOLDOWN_IDS.forEach(actionId => {
     const action = actionsById[actionId];
     if (!action) return;
-    if (action.charges) return;
     events.push({ actionId, time: START_TIME_SECONDS, kind: 'initial' });
+
+    if (action.charges) {
+      getChargeRecoveryEventsFromFacts(actionId, facts)
+        .forEach(time => events.push({ actionId, time, kind: 'ready' }));
+      return;
+    }
+
     const readyTimes = (facts.useTimesByAction.get(actionId) || []).map(useTime => useTime + (action.recast || DEFAULT_GCD_SECONDS));
     readyTimes.forEach(time => events.push({ actionId, time, kind: 'ready' }));
   });
@@ -387,21 +393,6 @@ function getMajorCooldownEventsFromFacts(facts) {
   return events
     .filter(event => event.time >= START_TIME_SECONDS && event.time <= getSimulationEndTime())
     .sort((a, b) => a.time - b.time || MAJOR_COOLDOWN_IDS.indexOf(a.actionId) - MAJOR_COOLDOWN_IDS.indexOf(b.actionId));
-}
-
-function addMajorChargeStatusToBuckets(buckets, facts, times) {
-  MAJOR_COOLDOWN_IDS.forEach(actionId => {
-    const action = actionsById[actionId];
-    if (!action?.charges) return;
-
-    buckets.forEach((bucket, columnIndex) => {
-      const columnTime = timeOf(columnIndex, times);
-      const charges = getAvailableChargesAtWithFacts(actionId, columnTime, facts);
-      for (let chargeIndex = 0; chargeIndex < charges; chargeIndex += 1) {
-        bucket.push({ actionId, time: columnTime, kind: 'charge', chargeIndex, charges });
-      }
-    });
-  });
 }
 
 function bucketEventsByColumn(events, times) {
@@ -800,7 +791,6 @@ function renderTimeline() {
   const robotBuckets = bucketRobotEventsByColumn(getRobotEventsFromFacts(facts), times);
   const robotSummons = getRobotSummons(times);
   const majorCooldownBuckets = bucketEventsByColumn(getMajorCooldownEventsFromFacts(facts), times);
-  addMajorChargeStatusToBuckets(majorCooldownBuckets, facts, times);
   deriveState(times, facts);
   const lastState = derivedState.at(-1) || { heat: 0, battery: 0, activeBuffs: [], reassembleCharges: 2, doubleCheckCharges: 3, checkmateCharges: 3 };
   if (elements.heatNow) {
