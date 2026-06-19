@@ -315,7 +315,6 @@ function simulateChargeState(actionId, atTime, useTimes, facts) {
   const maxCharges = action?.charges || 1;
   let charges = maxCharges;
   let nextRecoveryTime = null;
-  let nextRecoveryContinuesChain = false;
   const recoveryEvents = [];
   let blockedUseTime = null;
 
@@ -327,13 +326,9 @@ function simulateChargeState(actionId, atTime, useTimes, facts) {
       const recoveredAt = nextRecoveryTime;
       recoveryEvents.push(recoveredAt);
       charges = Math.min(maxCharges, charges + 1);
-      if (charges < maxCharges) {
-        nextRecoveryTime = getChargeRecoveryTime(actionId, recoveredAt, facts);
-        nextRecoveryContinuesChain = true;
-      } else {
-        nextRecoveryTime = null;
-        nextRecoveryContinuesChain = false;
-      }
+      nextRecoveryTime = charges < maxCharges
+        ? getChargeRecoveryTime(actionId, recoveredAt, facts)
+        : null;
     }
   };
 
@@ -341,32 +336,21 @@ function simulateChargeState(actionId, atTime, useTimes, facts) {
     recoverUntil(useTime, false);
 
     if (nextRecoveryTime !== null && Math.abs(nextRecoveryTime - useTime) <= TIME_EPSILON) {
-      if (nextRecoveryContinuesChain) {
-        const recoveredAt = nextRecoveryTime;
-        recoveryEvents.push(recoveredAt);
-        charges = Math.min(maxCharges, charges + 1);
-        if (charges < maxCharges) {
-          nextRecoveryTime = getChargeRecoveryTime(actionId, recoveredAt, facts);
-          nextRecoveryContinuesChain = true;
-        } else {
-          nextRecoveryTime = null;
-          nextRecoveryContinuesChain = false;
-        }
+      const recoveredAt = nextRecoveryTime;
+      recoveryEvents.push(recoveredAt);
+      charges = Math.min(maxCharges, charges + 1);
+      nextRecoveryTime = charges < maxCharges
+        ? getChargeRecoveryTime(actionId, recoveredAt, facts)
+        : null;
 
-        if (charges <= 0) {
-          blockedUseTime ??= useTime;
-          return;
-        }
+      if (charges <= 0) {
+        blockedUseTime ??= useTime;
+        return;
+      }
 
-        charges -= 1;
-        if (nextRecoveryTime === null) {
-          nextRecoveryTime = getChargeRecoveryTime(actionId, useTime, facts);
-          nextRecoveryContinuesChain = false;
-        }
-      } else {
-        charges = Math.max(0, charges - 1);
+      charges -= 1;
+      if (nextRecoveryTime === null) {
         nextRecoveryTime = getChargeRecoveryTime(actionId, useTime, facts);
-        nextRecoveryContinuesChain = false;
       }
       return;
     }
@@ -379,7 +363,6 @@ function simulateChargeState(actionId, atTime, useTimes, facts) {
     charges -= 1;
     if (nextRecoveryTime === null) {
       nextRecoveryTime = getChargeRecoveryTime(actionId, useTime, facts);
-      nextRecoveryContinuesChain = false;
     }
   });
 
