@@ -19,10 +19,13 @@ function extractFunction(name) {
 
 const chargeHarness = `
 const DEFAULT_GCD_SECONDS = 2.5;
+const START_TIME_SECONDS = -15;
 const TIME_EPSILON = 1e-6;
 const actionsById = { drill: { recast: 20, charges: 2 } };
 function getReductionEventTimes() { return []; }
 ${extractFunction('getChargeRecoveryTime')}
+${extractFunction('getDrillChargesFromEnergy')}
+${extractFunction('simulateDrillEnergyState')}
 ${extractFunction('simulateChargeState')}
 `;
 
@@ -30,37 +33,26 @@ const chargeContext = {};
 Function('context', `with (context) { ${chargeHarness}; context.simulateChargeState = simulateChargeState; }`)(chargeContext);
 
 let state = chargeContext.simulateChargeState('drill', 82.5, [62.5, 82.5], {});
-assert.equal(state.charges, 1, 'using Drill exactly when a charge recovers should spend one charge, not two');
-assert.equal(state.nextRecoveryTime, 102.5, 'spending one charge at 82.5s should start the next recovery toward 102.5s');
+assert.equal(state.energy, 20, 'Drill should spend 20 energy at 82.5s');
+assert.equal(state.charges, 1, '20 Drill energy should display as one charge');
+assert.equal(state.nextRecoveryTime, 102.5, 'Drill should be full again 20s after spending from 40 to 20');
+assert.deepEqual(state.recoveryEvents, [82.5], 'Drill CD reminders should only fire when energy reaches 40');
 
-state = chargeContext.simulateChargeState('drill', 215, [180, 200, 212.5], {});
-assert.equal(state.charges, 0, 'using Drill at 212.5s should spend the only available charge before 220s');
-assert.equal(state.nextRecoveryTime, 220, 'the next recovery after 212.5s should remain 220s');
+state = chargeContext.simulateChargeState('drill', 82.5, [62.5, 80, 82.5], {});
+assert.equal(state.energy, 0, 'Drill should be empty after spending at 80s and again at 82.5s');
+assert.equal(state.charges, 0, 'less than 20 Drill energy should display as zero charges');
+assert.equal(state.nextRecoveryTime, 122.5, 'Drill should be full again after recovering from 0 to 40');
 
-state = chargeContext.simulateChargeState('drill', 220, [180, 200, 212.5], {});
-assert.equal(state.charges, 1, 'Drill should have one charge at 220s');
-assert.equal(state.nextRecoveryTime, 240, 'the following Drill charge should recover at 240s');
-assert.deepEqual(
-  state.recoveryEvents,
-  [200, 220],
-  'using Drill at 212.5s must not reset the already-running recovery toward 220s',
-);
+state = chargeContext.simulateChargeState('drill', 215, [160, 180, 212.5], {});
+assert.equal(state.energy, 22.5, 'Drill energy should keep regenerating continuously between uses');
+assert.equal(state.charges, 1, 'energy from 20 inclusive to below 40 should display as one charge');
+assert.equal(state.nextRecoveryTime, 232.5, 'Drill should next be full when energy recovers back to 40');
+assert.deepEqual(state.recoveryEvents, [180, 200], 'Drill CD reminders should only mark full-energy moments');
 
-state = chargeContext.simulateChargeState('drill', 240, [180, 200, 212.5, 240], {});
-assert.equal(state.charges, 1, 'using Drill exactly when the second charge recovers should leave one charge');
-assert.equal(state.nextRecoveryTime, 260, 'spending one charge at 240s should start the next recovery toward 260s');
-
-state = chargeContext.simulateChargeState('drill', 40, [20, 22.5, 40], {});
-assert.equal(state.charges, 0, 'using Drill exactly as a charge recovers should display zero charges in that GCD');
-assert.equal(state.nextRecoveryTime, 60, 'the consumed same-time recovery should push the next Drill charge to 60s');
-
-state = chargeContext.simulateChargeState('drill', 57.5, [20, 22.5, 40], {});
-assert.equal(state.charges, 0, 'Drill should remain at zero charges until the next recovery completes');
-assert.equal(state.nextRecoveryTime, 60, 'the next recovery should still complete at 60s');
-
-state = chargeContext.simulateChargeState('drill', 215, [180.0000001, 200.0000002, 212.5], {});
-assert.equal(state.charges, 0, 'near-equal imported timestamps should be treated as same-time charge events');
-assert.ok(Math.abs(state.nextRecoveryTime - 220.0000002) <= 1e-6, 'near-equal imported timestamps should preserve the 220s recovery');
+state = chargeContext.simulateChargeState('drill', 232.5, [160, 180, 212.5], {});
+assert.equal(state.energy, 40, 'Drill should be full at 232.5s');
+assert.equal(state.charges, 2, '40 Drill energy should display as two charges');
+assert.deepEqual(state.recoveryEvents, [180, 200, 232.5], 'full-energy reminders should include 232.5s under the energy model');
 
 const transitionHarness = `
 const DEFAULT_GCD_SECONDS = 2.5;

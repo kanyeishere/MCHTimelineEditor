@@ -71,10 +71,71 @@ function getChargeRecoveryTime(actionId, cooldownStartTime, facts) {
   return cursor + remaining;
 }
 
+function getDrillChargesFromEnergy(energy) {
+  if (energy >= 40 - TIME_EPSILON) return 2;
+  if (energy >= 20 - TIME_EPSILON) return 1;
+  return 0;
+}
+
+function simulateDrillEnergyState(atTime, useTimes) {
+  const maxEnergy = 40;
+  const energyCost = 20;
+  const recoveryEvents = [];
+  let energy = maxEnergy;
+  let cursor = START_TIME_SECONDS;
+  let blockedUseTime = null;
+
+  const recoverTo = time => {
+    if (time <= cursor) return;
+    energy = Math.min(maxEnergy, energy + (time - cursor));
+    cursor = time;
+  };
+
+  useTimes.filter(useTime => useTime <= atTime).sort((a, b) => a - b).forEach(useTime => {
+    const fullTime = energy < maxEnergy ? cursor + (maxEnergy - energy) : null;
+    if (fullTime !== null && fullTime <= useTime + TIME_EPSILON) {
+      recoveryEvents.push(fullTime);
+      energy = maxEnergy;
+      cursor = fullTime;
+    }
+
+    recoverTo(useTime);
+
+    if (energy + TIME_EPSILON < energyCost) {
+      blockedUseTime ??= useTime;
+      return;
+    }
+
+    energy = Math.max(0, energy - energyCost);
+    cursor = useTime;
+  });
+
+  const fullTime = energy < maxEnergy ? cursor + (maxEnergy - energy) : null;
+  if (fullTime !== null && fullTime <= atTime + TIME_EPSILON) {
+    recoveryEvents.push(fullTime);
+    energy = maxEnergy;
+    cursor = fullTime;
+  }
+
+  recoverTo(atTime);
+
+  return {
+    charges: getDrillChargesFromEnergy(energy),
+    displayCharges: getDrillChargesFromEnergy(energy),
+    energy,
+    nextRecoveryTime: energy < maxEnergy ? cursor + (maxEnergy - energy) : null,
+    recoveryEvents,
+    blockedUseTime
+  };
+}
+
 function simulateChargeState(actionId, atTime, useTimes, facts) {
+  if (actionId === 'drill') return simulateDrillEnergyState(atTime, useTimes);
+
   const action = actionsById[actionId];
   const maxCharges = action?.charges || 1;
   let charges = maxCharges;
+  let displayChargesAtTime = null;
   let nextRecoveryTime = null;
   const recoveryEvents = [];
   let blockedUseTime = null;
@@ -98,21 +159,11 @@ function simulateChargeState(actionId, atTime, useTimes, facts) {
 
     if (nextRecoveryTime !== null && Math.abs(nextRecoveryTime - useTime) <= TIME_EPSILON) {
       const recoveredAt = nextRecoveryTime;
-      recoveryEvents.push(recoveredAt);
-      charges = Math.min(maxCharges, charges + 1);
-      nextRecoveryTime = charges < maxCharges
-        ? getChargeRecoveryTime(actionId, recoveredAt, facts)
-        : null;
-
-      if (charges <= 0) {
-        blockedUseTime ??= useTime;
-        return;
+      if (Math.abs(atTime - useTime) <= TIME_EPSILON) {
+        displayChargesAtTime = Math.max(0, Math.min(maxCharges, charges + 1) - 1);
       }
-
-      charges -= 1;
-      if (nextRecoveryTime === null) {
-        nextRecoveryTime = getChargeRecoveryTime(actionId, useTime, facts);
-      }
+      charges = Math.max(0, charges - 1);
+      nextRecoveryTime = getChargeRecoveryTime(actionId, recoveredAt, facts);
       return;
     }
 
@@ -131,6 +182,7 @@ function simulateChargeState(actionId, atTime, useTimes, facts) {
 
   return {
     charges,
+    displayCharges: displayChargesAtTime ?? charges,
     nextRecoveryTime,
     recoveryEvents,
     blockedUseTime
@@ -142,6 +194,13 @@ function getAvailableChargesAtWithFacts(actionId, atTime, facts) {
   if (!action?.charges) return 1;
   const useTimes = facts.useTimesByAction.get(actionId) || [];
   return simulateChargeState(actionId, atTime, useTimes, facts).charges;
+}
+
+function getDisplayChargesAtWithFacts(actionId, atTime, facts) {
+  const action = actionsById[actionId];
+  if (!action?.charges) return 1;
+  const useTimes = facts.useTimesByAction.get(actionId) || [];
+  return simulateChargeState(actionId, atTime, useTimes, facts).displayCharges;
 }
 
 function getChargeRecoveryEventsFromFacts(actionId, facts) {

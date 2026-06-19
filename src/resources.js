@@ -120,7 +120,7 @@ function deriveState(times = getTimelineTimes(), facts = collectTimelineFacts(ti
       heat: resources.heat,
       battery: resources.battery,
       activeBuffs,
-      drillCharges: getAvailableChargesAtWithFacts('drill', columnTime, facts),
+      drillCharges: getDisplayChargesAtWithFacts('drill', columnTime, facts),
       reassembleCharges: getAvailableChargesAtWithFacts('reassemble', columnTime, facts),
       doubleCheckCharges: getAvailableChargesAtWithFacts('double-check', columnTime, facts),
       checkmateCharges: getAvailableChargesAtWithFacts('checkmate', columnTime, facts)
